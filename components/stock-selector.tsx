@@ -26,17 +26,6 @@ interface StockSelectorProps {
   onSelectStock: (symbol: string) => void;
 }
 
-const POPULAR_STOCKS = [
-  "AAPL",
-  "MSFT",
-  "GOOGL",
-  "TSLA",
-  "NVDA",
-  "AMZN",
-  "META",
-  "NFLX",
-];
-
 export default function StockSelector({
   selectedStock,
   onSelectStock,
@@ -50,7 +39,7 @@ export default function StockSelector({
   return (
     <Card>
       <CardContent className="pt-6">
-        <div className="space-y-4">
+        <div>
           {/* Search Dropdown */}
           <div>
             <label className="text-sm text-muted-foreground mb-2 block">
@@ -126,26 +115,6 @@ export default function StockSelector({
                 </Command>
               </PopoverContent>
             </Popover>
-          </div>
-
-          {/* Popular Stocks */}
-          <div>
-            <label className="text-sm text-muted-foreground mb-2 block">
-              Popular Stocks
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {POPULAR_STOCKS.map((symbol) => (
-                <Button
-                  key={symbol}
-                  variant={selectedStock === symbol ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => onSelectStock(symbol)}
-                  className="min-w-[80px]"
-                >
-                  {symbol}
-                </Button>
-              ))}
-            </div>
           </div>
         </div>
       </CardContent>

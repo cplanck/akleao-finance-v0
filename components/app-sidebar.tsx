@@ -21,6 +21,7 @@ import {
 
 import { NavDocuments } from "@/components/nav-documents"
 import { NavMain } from "@/components/nav-main"
+import { NavPinnedStocks } from "@/components/nav-pinned-stocks"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -34,11 +35,6 @@ import {
 } from "@/components/ui/sidebar"
 
 const data = {
-  user: {
-    name: "Investor",
-    email: "investor@akleao.finance",
-    avatar: "/avatars/user.jpg",
-  },
   navMain: [
     {
       title: "Dashboard",
@@ -64,6 +60,11 @@ const data = {
       title: "Research",
       url: "#",
       icon: SearchIcon,
+    },
+    {
+      title: "Admin",
+      url: "/admin",
+      icon: DatabaseIcon,
     },
   ],
   navClouds: [
@@ -154,7 +155,23 @@ const data = {
   ],
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  selectedStock?: string
+  onSelectStock?: (symbol: string) => void
+}
+
+export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSidebarProps) {
+  const pinnedStocks = [
+    { symbol: "AAPL" },
+    { symbol: "MSFT" },
+    { symbol: "GOOGL" },
+    { symbol: "TSLA" },
+    { symbol: "NVDA" },
+    { symbol: "AMZN" },
+    { symbol: "META" },
+    { symbol: "NFLX" },
+  ]
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -166,7 +183,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <a href="#">
                 <ArrowUpCircleIcon className="h-5 w-5" />
-                <span className="text-base font-semibold">Acme Inc.</span>
+                <span className="text-base font-semibold">Akleao Finance</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -174,11 +191,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
+        <NavPinnedStocks
+          items={pinnedStocks}
+          selectedStock={selectedStock}
+          onSelectStock={onSelectStock}
+        />
         <NavDocuments items={data.documents} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   )

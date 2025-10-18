@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,14 +10,31 @@ import { SiteHeader } from "@/components/site-header";
 import StockSelector from "@/components/stock-selector";
 import StockChart from "@/components/stock-chart";
 import KeyMetrics from "@/components/key-metrics";
+import FundamentalsSummary from "@/components/fundamentals-summary";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchStockQuote, fetchStockOverview } from "@/lib/stock-api";
 import { SECTOR_COLORS } from "@/lib/sp500-stocks";
 import { cn } from "@/lib/utils";
+import { Clock } from "lucide-react";
+
+function getTimeAgo(date: Date): string {
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export default function Home() {
   const [selectedStock, setSelectedStock] = useState("AAPL");
+  const [dataFetchedAt, setDataFetchedAt] = useState<Date>(new Date());
+  const [timeAgo, setTimeAgo] = useState<string>("just now");
 
-  const { data: quote, isLoading: quoteLoading } = useQuery({
+  const { data: quote, isLoading: quoteLoading, dataUpdatedAt: quoteUpdatedAt } = useQuery({
     queryKey: ["quote", selectedStock],
     queryFn: () => fetchStockQuote(selectedStock),
   });
@@ -27,9 +44,29 @@ export default function Home() {
     queryFn: () => fetchStockOverview(selectedStock),
   });
 
+  // Update dataFetchedAt when quote data is fetched
+  useEffect(() => {
+    if (quoteUpdatedAt) {
+      setDataFetchedAt(new Date(quoteUpdatedAt));
+    }
+  }, [quoteUpdatedAt]);
+
+  // Update time ago every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeAgo(getTimeAgo(dataFetchedAt));
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [dataFetchedAt]);
+
   return (
     <SidebarProvider>
-      <AppSidebar variant="inset" />
+      <AppSidebar
+        variant="inset"
+        selectedStock={selectedStock}
+        onSelectStock={setSelectedStock}
+      />
       <SidebarInset>
         <SiteHeader />
         <div className="flex flex-1 flex-col">
@@ -91,16 +128,33 @@ export default function Home() {
                     {quote?.change.toFixed(2)} ({quote?.changePercent.toFixed(2)}%)
                   </span>
                 </div>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 sm:justify-end">
+                  <Clock className="h-3 w-3" />
+                  <span>Updated {timeAgo}</span>
+                </div>
               </div>
             </div>
           </CardHeader>
         </Card>
 
-        {/* Stock Chart */}
-        <StockChart symbol={selectedStock} />
+        {/* AI Fundamentals Summary */}
+        <FundamentalsSummary symbol={selectedStock} />
 
-        {/* Key Metrics */}
-        <KeyMetrics symbol={selectedStock} />
+        {/* Tabs for Chart and Fundamentals */}
+        <Tabs defaultValue="chart" className="space-y-6">
+          <TabsList className="grid w-full sm:w-auto grid-cols-2">
+            <TabsTrigger value="chart">Chart</TabsTrigger>
+            <TabsTrigger value="fundamentals">Fundamentals</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="chart" className="space-y-6">
+            <StockChart symbol={selectedStock} />
+          </TabsContent>
+
+          <TabsContent value="fundamentals" className="space-y-6">
+            <KeyMetrics symbol={selectedStock} />
+          </TabsContent>
+        </Tabs>
 
         {/* Company Info */}
         {overview && (

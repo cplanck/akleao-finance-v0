@@ -33,6 +33,43 @@ export default function StockChart({ symbol }: StockChartProps) {
     },
   });
 
+  // Calculate appropriate tick interval for X-axis based on data length
+  // Also returns indices to show (excluding first and last)
+  const getTicksToShow = () => {
+    if (!data || data.length === 0) return [];
+
+    const dataLength = data.length;
+    let interval = Math.ceil(dataLength / 10);
+
+    // For intraday (1D), show ~8-10 ticks
+    if (timeRange === "1D") {
+      interval = Math.ceil(dataLength / 10);
+    }
+    // For 1 week (15m intervals, ~200 points), show ~10 ticks
+    else if (timeRange === "1W") {
+      interval = Math.ceil(dataLength / 10);
+    }
+    // For 1 month (hourly, ~150 points), show ~10 ticks
+    else if (timeRange === "1M") {
+      interval = Math.ceil(dataLength / 10);
+    }
+    // For 3 months (daily, ~65 points), show ~10 ticks
+    else if (timeRange === "3M") {
+      interval = Math.ceil(dataLength / 10);
+    }
+    // For 1 year (daily, ~250 points), show ~12 ticks (monthly)
+    else if (timeRange === "1Y") {
+      interval = Math.ceil(dataLength / 12);
+    }
+
+    // Generate tick indices, excluding first (0) and last (dataLength - 1)
+    const ticks = [];
+    for (let i = interval; i < dataLength - 1; i += interval) {
+      ticks.push(i);
+    }
+    return ticks;
+  };
+
   // Calculate dynamic Y-axis domain for Robinhood-style chart
   const getDomain = () => {
     if (!data || data.length === 0) return [0, 100];
@@ -68,7 +105,7 @@ export default function StockChart({ symbol }: StockChartProps) {
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-[300px] sm:h-[400px] md:h-[500px] w-full">
-            <AreaChart data={data || []}>
+            <AreaChart data={data || []} margin={{ left: 0, right: 0, top: 5, bottom: 5 }}>
             <defs>
               <linearGradient id="fillPrice" x1="0" y1="0" x2="0" y2="1">
                 <stop
@@ -93,9 +130,18 @@ export default function StockChart({ symbol }: StockChartProps) {
               tickLine={false}
               axisLine={false}
               tickMargin={12}
+              ticks={getTicksToShow().map(i => data[i].date)}
               tickFormatter={(value) => {
-                if (timeRange === "1D") return value;
-                return value.slice(0, 6);
+                // For 1D: show time as is (e.g., "10:30 AM")
+                if (timeRange === "1D") {
+                  return value;
+                }
+                // For 1W and 1M: value is "Oct 10 10:30 AM", show just "Oct 10"
+                if (timeRange === "1W" || timeRange === "1M") {
+                  return value.split(" ").slice(0, 2).join(" ");
+                }
+                // For 3M and 1Y: value is "Oct 10", show as is
+                return value;
               }}
               className="text-xs text-muted-foreground"
             />

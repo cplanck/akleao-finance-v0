@@ -7,6 +7,8 @@ import {
   MoreVerticalIcon,
   UserCircleIcon,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useSession, signOut } from "@/lib/auth-client"
 
 import {
   Avatar,
@@ -28,17 +30,59 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 
-export function NavUser({
-  user,
-}: {
-  user: {
-    name: string
-    email: string
-    avatar: string
-  }
-}) {
+export function NavUser() {
   const { isMobile } = useSidebar()
+  const router = useRouter()
+  const { data: session, isPending } = useSession()
+
+  const handleSignOut = async () => {
+    await signOut()
+    router.push("/sign-in")
+  }
+
+  if (isPending) {
+    return null
+  }
+
+  if (!session) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <Button
+            onClick={() => router.push("/sign-in")}
+            className="w-full"
+            variant="outline"
+          >
+            Sign In
+          </Button>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
+
+  const user = session.user
+
+  // Get user initials for avatar fallback
+  const getInitials = (name?: string) => {
+    if (!name) return "U";
+    const parts = name.split(" ");
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  // Generate Gravatar URL from email as fallback since Better Auth isn't providing the Google avatar
+  const getGravatarUrl = (email: string) => {
+    // Simple hash function for email (in production, use proper MD5)
+    const hash = email.toLowerCase().trim();
+    return `https://www.gravatar.com/avatar/${hash}?d=identicon&s=200`;
+  };
+
+  // Use Gravatar as fallback if no image is provided
+  const avatarUrl = user.image || getGravatarUrl(user.email);
 
   return (
     <SidebarMenu>
@@ -49,9 +93,9 @@ export function NavUser({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="h-8 w-8 rounded-lg grayscale">
-                <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+              <Avatar className="h-8 w-8 rounded-lg">
+                <AvatarImage src={avatarUrl} alt={user.name} />
+                <AvatarFallback className="rounded-lg">{getInitials(user.name)}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
@@ -71,8 +115,8 @@ export function NavUser({
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarImage src={avatarUrl} alt={user.name} />
+                  <AvatarFallback className="rounded-lg">{getInitials(user.name)}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
@@ -98,7 +142,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut}>
               <LogOutIcon />
               Log out
             </DropdownMenuItem>

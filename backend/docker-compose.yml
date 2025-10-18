@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: akleao-postgres
+    environment:
+      POSTGRES_USER: akleao
+      POSTGRES_PASSWORD: akleao_dev_password
+      POSTGRES_DB: akleao
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U akleao"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: akleao-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: akleao-api
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - REDIS_URL=redis://redis:6379
+      - ENV=development
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production-12345678}
+      - CORS_ORIGINS=["http://localhost:3000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./api-gateway:/app
+      - ./shared:/app/shared
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Reddit Scraper Worker (Phase 1)
+  reddit-scraper:
+    build:
+      context: ./workers/reddit-scraper
+      dockerfile: Dockerfile
+    container_name: akleao-reddit-scraper
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - REDIS_URL=redis://redis:6379
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
+      - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-AkleaoFinance/1.0}
+      - SCRAPE_INTERVAL_MINUTES=${SCRAPE_INTERVAL_MINUTES:-15}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers/reddit-scraper:/app
+      - ./shared:/app/shared
+    restart: unless-stopped
+
+  # Future workers (Phase 2+) - commented out for now
+  # Uncomment these as you build them
+
+  # # Metrics Aggregator (Phase 2A)
+  # metrics-aggregator:
+  #   build:
+  #     context: ./workers/metrics-aggregator
+  #     dockerfile: Dockerfile
+  #   container_name: akleao-metrics-aggregator
+  #   environment:
+  #     - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+  #     - REDIS_URL=redis://redis:6379
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./workers/metrics-aggregator:/app
+  #     - ./shared:/app/shared
+  #   restart: unless-stopped
+
+  # # Anomaly Detector (Phase 2A)
+  # anomaly-detector:
+  #   build:
+  #     context: ./workers/anomaly-detector
+  #     dockerfile: Dockerfile
+  #   container_name: akleao-anomaly-detector
+  #   environment:
+  #     - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+  #     - REDIS_URL=redis://redis:6379
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./workers/anomaly-detector:/app
+  #     - ./shared:/app/shared
+  #   restart: unless-stopped
+
+  # # Sentiment Analyzer (Phase 2B)
+  # sentiment-analyzer:
+  #   build:
+  #     context: ./workers/sentiment-analyzer
+  #     dockerfile: Dockerfile
+  #   container_name: akleao-sentiment-analyzer
+  #   environment:
+  #     - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+  #     - REDIS_URL=redis://redis:6379
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./workers/sentiment-analyzer:/app
+  #     - ./shared:/app/shared
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: akleao-network
