@@ -7,9 +7,22 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { fetchDailyData, fetchIntradayData } from "@/lib/stock-api";
+import { PinButton } from "@/components/pin-button";
 
 interface StockChartProps {
   symbol: string;
+  quote?: {
+    price: number;
+    change: number;
+    changePercent: number;
+  };
+  overview?: {
+    name: string;
+    sector: string;
+    industry: string;
+  };
+  quoteLoading?: boolean;
+  overviewLoading?: boolean;
 }
 
 const chartConfig = {
@@ -19,7 +32,13 @@ const chartConfig = {
   },
 };
 
-export default function StockChart({ symbol }: StockChartProps) {
+export default function StockChart({
+  symbol,
+  quote,
+  overview,
+  quoteLoading,
+  overviewLoading
+}: StockChartProps) {
   const [timeRange, setTimeRange] = useState("1M");
 
   const { data, isLoading } = useQuery({
@@ -83,25 +102,64 @@ export default function StockChart({ symbol }: StockChartProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <CardTitle className="text-lg sm:text-xl">Price Chart</CardTitle>
-          <Tabs value={timeRange} onValueChange={setTimeRange}>
-            <TabsList className="grid grid-cols-5 w-full sm:w-auto">
-              <TabsTrigger value="1D" className="text-xs sm:text-sm">1D</TabsTrigger>
-              <TabsTrigger value="1W" className="text-xs sm:text-sm">1W</TabsTrigger>
-              <TabsTrigger value="1M" className="text-xs sm:text-sm">1M</TabsTrigger>
-              <TabsTrigger value="3M" className="text-xs sm:text-sm">3M</TabsTrigger>
-              <TabsTrigger value="1Y" className="text-xs sm:text-sm">1Y</TabsTrigger>
-            </TabsList>
-          </Tabs>
+    <Card className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-br from-card/95 via-card/90 to-card/95 border-primary/10 shadow-2xl hover:shadow-primary/5 transition-all duration-500">
+      {/* Ambient gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
+
+      <CardHeader className="pb-4 relative z-10">
+        {/* Stock Info Row */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="space-y-1">
+            <CardTitle className="text-2xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">
+              {overviewLoading ? (
+                <span className="inline-block animate-pulse">Loading...</span>
+              ) : (
+                overview?.name || symbol
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="font-medium">{symbol}</span>
+              <PinButton symbol={symbol} />
+              {overview && (
+                <>
+                  <span className="opacity-50">•</span>
+                  <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                    {overview.sector}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="text-left sm:text-right group">
+            <div className="text-3xl font-bold transition-transform duration-300 group-hover:scale-105">
+              {quoteLoading ? (
+                <span className="inline-block animate-pulse">...</span>
+              ) : (
+                `$${quote?.price.toFixed(2)}`
+              )}
+            </div>
+            <div
+              className={`text-sm flex items-center sm:justify-end gap-1 font-semibold transition-all duration-300 ${
+                (quote?.change || 0) >= 0
+                  ? "text-green-500 group-hover:text-green-400"
+                  : "text-red-500 group-hover:text-red-400"
+              }`}
+            >
+              <span className="text-lg">{(quote?.change || 0) >= 0 ? "↗" : "↘"}</span>
+              <span className="px-2 py-0.5 rounded-full bg-current/10">
+                {quote?.change.toFixed(2)} ({quote?.changePercent.toFixed(2)}%)
+              </span>
+            </div>
+          </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pb-4 relative z-10">
         {isLoading ? (
-          <div className="h-[300px] sm:h-[400px] md:h-[500px] flex items-center justify-center text-muted-foreground">
-            Loading chart data...
+          <div className="h-[300px] sm:h-[400px] md:h-[500px] flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+              <span className="text-sm text-muted-foreground font-medium">Loading chart data...</span>
+            </div>
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-[300px] sm:h-[400px] md:h-[500px] w-full">
@@ -176,6 +234,44 @@ export default function StockChart({ symbol }: StockChartProps) {
           </AreaChart>
         </ChartContainer>
         )}
+
+        {/* Time Range Tabs - Bottom */}
+        <div className="flex justify-center mt-4">
+          <Tabs value={timeRange} onValueChange={setTimeRange}>
+            <TabsList className="grid grid-cols-5 bg-muted/50 backdrop-blur-sm p-1 rounded-xl border border-primary/5">
+              <TabsTrigger
+                value="1D"
+                className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+              >
+                1D
+              </TabsTrigger>
+              <TabsTrigger
+                value="1W"
+                className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+              >
+                1W
+              </TabsTrigger>
+              <TabsTrigger
+                value="1M"
+                className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+              >
+                1M
+              </TabsTrigger>
+              <TabsTrigger
+                value="3M"
+                className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+              >
+                3M
+              </TabsTrigger>
+              <TabsTrigger
+                value="1Y"
+                className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+              >
+                1Y
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </CardContent>
     </Card>
   );

@@ -1,11 +1,16 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Database, TrendingUp, FileText, Activity, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Database, TrendingUp, FileText, Activity, Clock, CheckCircle2, XCircle, Loader2, Play } from "lucide-react";
 import Link from "next/link";
+import { OpenAISettingsCard } from "@/components/openai-settings-card";
+import { toast } from "sonner";
+import { io, Socket } from "socket.io-client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -58,6 +63,17 @@ async function fetchScraperHealth(): Promise<ScraperHealth> {
   return response.json();
 }
 
+async function triggerScrape(): Promise<{ message: string; status: string; timestamp: string }> {
+  const response = await fetch(`${API_URL}/api/admin/trigger-scrape`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to trigger scraper");
+  }
+  return response.json();
+}
+
 function formatTimeUntil(dateString: string): string {
   const date = new Date(dateString + (dateString.endsWith('Z') ? '' : 'Z'));
   const now = new Date();
@@ -79,37 +95,180 @@ function formatLocalTime(dateString: string | null): string {
 }
 
 export function AdminDashboard() {
+  const [mounted, setMounted] = useState(false);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [runStartTime, setRunStartTime] = useState<Date | null>(null);
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    setMounted(true);
+
+    // Initialize Socket.IO connection
+    const socketInstance = io(API_URL, {
+      path: "/socket.io",
+      transports: ["websocket", "polling"],
+    });
+
+    socketInstance.on("connect", () => {
+      console.log("✅ Connected to WebSocket");
+    });
+
+    socketInstance.on("disconnect", () => {
+      console.log("👋 Disconnected from WebSocket");
+    });
+
+    socketInstance.on("scraper_status", (data) => {
+      console.log("📡 Received scraper status update:", data);
+
+      // Track when run starts
+      if (data.status === "running" && data.started_at) {
+        const startDate = new Date(data.started_at + (data.started_at.endsWith('Z') ? '' : 'Z'));
+        setRunStartTime(startDate);
+      }
+
+      // Clear timer when completed or failed
+      if (data.status === "completed" || data.status === "failed") {
+        setRunStartTime(null);
+        setElapsedTime(0);
+      }
+
+      // Invalidate queries to refresh UI with new data
+      queryClient.invalidateQueries({ queryKey: ["scraper-health"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+
+      // Show toast notification
+      if (data.status === "completed") {
+        toast.success("Scraper Completed", {
+          description: `Collected ${data.posts_collected} posts in ${data.duration_seconds.toFixed(1)}s`,
+        });
+      } else if (data.status === "failed") {
+        toast.error("Scraper Failed", {
+          description: data.message,
+        });
+      }
+    });
+
+    setSocket(socketInstance);
+
+    // Cleanup on unmount
+    return () => {
+      socketInstance.disconnect();
+    };
+  }, [queryClient]);
+
+  // Elapsed time counter
+  useEffect(() => {
+    if (!runStartTime) return;
+
+    // Set initial elapsed time immediately
+    const updateElapsedTime = () => {
+      const elapsed = Math.floor((Date.now() - runStartTime.getTime()) / 1000);
+      setElapsedTime(elapsed);
+    };
+
+    // Update immediately
+    updateElapsedTime();
+
+    // Then update every second
+    const interval = setInterval(updateElapsedTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [runStartTime]);
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ["admin-stats"],
     queryFn: fetchAdminStats,
-    refetchInterval: 60000,
+    // Remove refetchInterval - WebSocket will handle updates
   });
 
   const { data: health, isLoading: healthLoading } = useQuery({
     queryKey: ["scraper-health"],
     queryFn: fetchScraperHealth,
-    refetchInterval: 30000,
+    // Remove refetchInterval - WebSocket will handle updates
+  });
+
+  // Initialize elapsed time when health data loads with a running scraper
+  useEffect(() => {
+    if (health?.status === "running" && health?.last_run?.started_at && !runStartTime) {
+      const startDate = new Date(health.last_run.started_at + (health.last_run.started_at.endsWith('Z') ? '' : 'Z'));
+      setRunStartTime(startDate);
+    }
+  }, [health, runStartTime]);
+
+  const triggerMutation = useMutation({
+    mutationFn: triggerScrape,
+    onMutate: async () => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["scraper-health"] });
+
+      // Snapshot the previous value
+      const previousHealth = queryClient.getQueryData(["scraper-health"]);
+
+      // Optimistically update to pending status
+      queryClient.setQueryData(["scraper-health"], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          status: "pending",
+          status_message: "Manual scrape queued, waiting to start",
+        };
+      });
+
+      // Return context with snapshot
+      return { previousHealth };
+    },
+    onSuccess: (data) => {
+      toast.success("Scraper Triggered", {
+        description: "The Reddit scraper has been started manually.",
+      });
+      // Refetch health data to show updated status
+      queryClient.invalidateQueries({ queryKey: ["scraper-health"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+    onError: (error: Error, variables, context: any) => {
+      // Rollback on error
+      if (context?.previousHealth) {
+        queryClient.setQueryData(["scraper-health"], context.previousHealth);
+      }
+      toast.error("Error", {
+        description: error.message,
+      });
+    },
   });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "healthy":
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+        return <Activity className="h-4 w-4 text-green-500" />;
       case "running":
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
+        return <Activity className="h-4 w-4 text-blue-500" />;
+      case "pending":
+        return <Activity className="h-4 w-4 text-yellow-500" />;
       case "error":
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <Activity className="h-4 w-4 text-red-500" />;
       default:
-        return <Clock className="h-4 w-4 text-gray-500" />;
+        return <Activity className="h-4 w-4 text-gray-500" />;
     }
+  };
+
+  const formatElapsedTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "healthy":
-        return <Badge className="bg-green-500">Healthy</Badge>;
+        return <Badge className="bg-green-500">Idle</Badge>;
       case "running":
         return <Badge className="bg-blue-500">Running</Badge>;
+      case "pending":
+        return <Badge className="bg-yellow-500">Queued</Badge>;
       case "error":
         return <Badge variant="destructive">Error</Badge>;
       default:
@@ -119,77 +278,148 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Scraper Health Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              {health && getStatusIcon(health.status)}
-              Reddit Scraper Health
-            </CardTitle>
-            {health && getStatusBadge(health.status)}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {healthLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-            </div>
-          ) : health ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <div className="text-sm text-muted-foreground">Status</div>
-                  <div className="text-lg font-semibold">{health.status_message}</div>
+      {/* Top Row: OpenAI Settings & Scraper Health */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <OpenAISettingsCard />
+
+        <Card className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-br from-card/95 via-card/90 to-card/95 border-primary/10 shadow-xl hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 group">
+          {/* Ambient gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
+
+          <CardHeader className="relative z-10">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-lg sm:text-xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                  {health && getStatusIcon(health.status)}
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Next Run</div>
-                  <div className="text-lg font-semibold">
-                    {formatTimeUntil(health.next_run)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Success Rate</div>
-                  <div className="text-lg font-semibold">{health.stats.success_rate}%</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Avg Duration</div>
-                  <div className="text-lg font-semibold">
-                    {health.stats.avg_duration_seconds.toFixed(1)}s
-                  </div>
+                Reddit Scraper
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => triggerMutation.mutate()}
+                  disabled={triggerMutation.isPending || (health?.status === "running") || (health?.status === "pending")}
+                  className="gap-2 w-[100px]"
+                >
+                  {triggerMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3 w-3" />
+                      Run Now
+                    </>
+                  )}
+                </Button>
+                <div className="min-w-[80px] flex justify-center">
+                  {health && getStatusBadge(health.status)}
                 </div>
               </div>
-
-              {health.last_run.started_at && (
-                <div className="pt-4 border-t">
-                  <div className="text-sm font-medium mb-2">Last Run Details</div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Started:</span>{" "}
-                      {formatLocalTime(health.last_run.started_at)}
+            </div>
+          </CardHeader>
+          <CardContent className="relative z-10">
+            {healthLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            ) : health ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300">
+                    <div className="text-muted-foreground text-xs font-semibold uppercase tracking-wide mb-1">
+                      {health.status === "running" ? "Elapsed Time" : "Last Run"}
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Duration:</span>{" "}
-                      {health.last_run.duration_seconds?.toFixed(1)}s
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Posts:</span>{" "}
-                      {health.last_run.posts_collected}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Errors:</span>{" "}
-                      {health.last_run.errors_count}
+                    <div className="text-sm font-bold">
+                      {health.status === "running" && runStartTime
+                        ? formatElapsedTime(elapsedTime)
+                        : health.last_run?.completed_at
+                        ? mounted ? formatLocalTime(health.last_run.completed_at) : "-"
+                        : "Never"}
                     </div>
                   </div>
+                  <div className="p-3 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300">
+                    <div className="text-muted-foreground text-xs font-semibold uppercase tracking-wide mb-1">
+                      {health.status === "running" || health.status === "pending" ? "Status" : "Next Run"}
+                    </div>
+                    <div className="text-sm font-bold">
+                      {health.status === "running"
+                        ? "Scraping..."
+                        : health.status === "pending"
+                        ? "Queued"
+                        : mounted ? formatTimeUntil(health.next_run) : "-"}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300">
+                    <div className="text-muted-foreground text-xs font-semibold uppercase tracking-wide mb-1">Success Rate</div>
+                    <div className="text-sm font-bold">{health.stats.success_rate}%</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300">
+                    <div className="text-muted-foreground text-xs font-semibold uppercase tracking-wide mb-1">Avg Duration</div>
+                    <div className="text-sm font-bold">{health.stats.avg_duration_seconds.toFixed(1)}s</div>
+                  </div>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-muted-foreground">No scraper data available</div>
-          )}
-        </CardContent>
-      </Card>
+
+                {/* Recent Runs Table */}
+                {health.recent_runs && health.recent_runs.length > 0 && (
+                  <div className="pt-4 border-t border-primary/10">
+                    <div className="text-sm font-semibold mb-3">Recent Runs</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-primary/10">
+                            <th className="text-left py-2 text-xs text-muted-foreground font-semibold">Started</th>
+                            <th className="text-left py-2 text-xs text-muted-foreground font-semibold">Status</th>
+                            <th className="text-right py-2 text-xs text-muted-foreground font-semibold">Duration</th>
+                            <th className="text-right py-2 text-xs text-muted-foreground font-semibold">Posts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {health.recent_runs.slice(0, 5).map((run, idx) => (
+                            <tr key={idx} className="border-b border-primary/5 hover:bg-muted/30 transition-colors">
+                              <td className="py-2 text-xs">{mounted ? formatLocalTime(run.started_at) : "-"}</td>
+                              <td className="py-2">
+                                {run.status === "completed" ? (
+                                  <Badge className="bg-green-500 text-xs px-2 py-0">
+                                    <CheckCircle2 className="h-2 w-2 mr-1" />
+                                    Done
+                                  </Badge>
+                                ) : run.status === "running" ? (
+                                  <Badge className="bg-blue-500 text-xs px-2 py-0">
+                                    <Loader2 className="h-2 w-2 mr-1 animate-spin" />
+                                    Running
+                                  </Badge>
+                                ) : run.status === "pending" ? (
+                                  <Badge className="bg-yellow-500 text-xs px-2 py-0">
+                                    <Clock className="h-2 w-2 mr-1" />
+                                    Queued
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="destructive" className="text-xs px-2 py-0">
+                                    <XCircle className="h-2 w-2 mr-1" />
+                                    Failed
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="py-2 text-right text-xs">{run.duration_seconds ? run.duration_seconds.toFixed(1) + 's' : '-'}</td>
+                              <td className="py-2 text-right text-xs font-semibold">{run.posts_collected ?? 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-muted-foreground text-center py-8">No scraper data available</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -204,13 +434,13 @@ export function AdminDashboard() {
             ) : (
               <div className="text-2xl font-bold">{stats?.total_posts.toLocaleString()}</div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">
-              {isLoading ? (
-                <Skeleton className="h-4 w-32" />
-              ) : (
-                `${stats?.recent_posts_24h} in last 24h`
-              )}
-            </p>
+            {isLoading ? (
+              <Skeleton className="h-4 w-32 mt-1" />
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                {`${stats?.recent_posts_24h} in last 24h`}
+              </p>
+            )}
           </CardContent>
         </Card>
 

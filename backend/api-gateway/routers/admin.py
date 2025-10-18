@@ -1,6 +1,6 @@
 """Admin API routes for viewing scraped data."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from typing import Optional
@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from database import get_db
 import sys
 sys.path.insert(0, "../shared")
-from shared.models.reddit_post import RedditPost
+from shared.models.reddit_post import RedditPost, RedditComment
 from shared.models.stock import Stock
 from shared.models.scraper_run import ScraperRun
 
@@ -49,6 +49,7 @@ async def get_reddit_posts(
                 "id": post.id,
                 "subreddit": post.subreddit,
                 "title": post.title,
+                "content": post.content,
                 "author": post.author,
                 "url": post.url,
                 "score": post.score,
@@ -166,18 +167,131 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.get("/comments")
+async def get_comments(
+    stock: Optional[str] = None,
+    sentiment: Optional[str] = None,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get Reddit comments with optional filters."""
+    # Build query with join to get post info
+    stmt = (
+        select(
+            RedditComment,
+            RedditPost.title.label("post_title"),
+            RedditPost.subreddit.label("subreddit"),
+        )
+        .join(RedditPost, RedditComment.post_id == RedditPost.id)
+    )
+
+    # Apply filters
+    if stock:
+        stmt = stmt.where(RedditComment.mentioned_stocks.contains(f'"{stock}"'))
+    if sentiment:
+        stmt = stmt.where(RedditComment.sentiment_label == sentiment)
+
+    # Get total count
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar()
+
+    # Get paginated results
+    stmt = stmt.order_by(desc(RedditComment.created_at)).offset(offset).limit(limit)
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return {
+        "comments": [
+            {
+                "id": row.RedditComment.id,
+                "post_id": row.RedditComment.post_id,
+                "post_title": row.post_title,
+                "subreddit": row.subreddit,
+                "author": row.RedditComment.author,
+                "content": row.RedditComment.content,
+                "score": row.RedditComment.score,
+                "mentioned_stocks": row.RedditComment.mentioned_stocks,
+                "sentiment_label": row.RedditComment.sentiment_label,
+                "sentiment_score": row.RedditComment.sentiment_score,
+                "created_at": row.RedditComment.created_at.isoformat(),
+            }
+            for row in rows
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.get("/reddit-posts/{post_id}/comments")
+async def get_post_comments(
+    post_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get comments for a specific Reddit post."""
+    stmt = (
+        select(RedditComment)
+        .where(RedditComment.post_id == post_id)
+        .order_by(desc(RedditComment.score))
+    )
+    result = await db.execute(stmt)
+    comments = result.scalars().all()
+
+    return [
+        {
+            "id": comment.id,
+            "post_id": comment.post_id,
+            "author": comment.author,
+            "content": comment.content,
+            "score": comment.score,
+            "mentioned_stocks": comment.mentioned_stocks,
+            "sentiment_label": comment.sentiment_label,
+            "sentiment_score": comment.sentiment_score,
+            "created_at": comment.created_at.isoformat(),
+        }
+        for comment in comments
+    ]
+
+
 @router.get("/scraper-health")
 async def get_scraper_health(db: AsyncSession = Depends(get_db)):
     """Get scraper health and status information."""
-    # Get last run
-    last_run_stmt = (
+    # Get last run - prioritize running, then pending, then most recent
+    # First check for running
+    running_stmt = (
         select(ScraperRun)
         .where(ScraperRun.run_type == "reddit")
+        .where(ScraperRun.status == "running")
         .order_by(desc(ScraperRun.started_at))
         .limit(1)
     )
-    last_run_result = await db.execute(last_run_stmt)
-    last_run = last_run_result.scalar_one_or_none()
+    running_result = await db.execute(running_stmt)
+    last_run = running_result.scalar_one_or_none()
+
+    # If no running, check for pending
+    if not last_run:
+        pending_stmt = (
+            select(ScraperRun)
+            .where(ScraperRun.run_type == "reddit")
+            .where(ScraperRun.status == "pending")
+            .order_by(desc(ScraperRun.started_at))
+            .limit(1)
+        )
+        pending_result = await db.execute(pending_stmt)
+        last_run = pending_result.scalar_one_or_none()
+
+    # If no running or pending, get the most recent one
+    if not last_run:
+        last_run_stmt = (
+            select(ScraperRun)
+            .where(ScraperRun.run_type == "reddit")
+            .order_by(desc(ScraperRun.started_at))
+            .limit(1)
+        )
+        last_run_result = await db.execute(last_run_stmt)
+        last_run = last_run_result.scalar_one_or_none()
 
     # Get recent runs (last 10)
     recent_runs_stmt = (
@@ -204,6 +318,9 @@ async def get_scraper_health(db: AsyncSession = Depends(get_db)):
     if not last_run:
         status = "idle"
         status_message = "No runs recorded yet"
+    elif last_run.status == "pending":
+        status = "pending"
+        status_message = "Manual scrape queued, waiting to start"
     elif last_run.status == "running":
         status = "running"
         status_message = "Scraper is currently running"
@@ -252,4 +369,42 @@ async def get_scraper_health(db: AsyncSession = Depends(get_db)):
             }
             for run in recent_runs[:5]
         ],
+    }
+
+
+@router.post("/trigger-scrape")
+async def trigger_scrape(db: AsyncSession = Depends(get_db)):
+    """Manually trigger a Reddit scrape by creating a pending run."""
+    # Check if a scraper run is already in progress or pending
+    last_run_stmt = (
+        select(ScraperRun)
+        .where(ScraperRun.run_type == "reddit")
+        .where(ScraperRun.status.in_(["running", "pending"]))
+        .order_by(desc(ScraperRun.started_at))
+        .limit(1)
+    )
+    last_run_result = await db.execute(last_run_stmt)
+    last_run = last_run_result.scalar_one_or_none()
+
+    if last_run:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Scraper is already {last_run.status}. Please wait for it to complete."
+        )
+
+    # Create a pending scraper run that the worker will pick up
+    manual_run = ScraperRun(
+        run_type="reddit",
+        status="pending",
+        started_at=datetime.utcnow(),
+        posts_collected=0,
+        errors_count=0,
+    )
+    db.add(manual_run)
+    await db.commit()
+
+    return {
+        "message": "Scraper trigger queued successfully. The scraper will run shortly.",
+        "status": "pending",
+        "timestamp": datetime.utcnow().isoformat()
     }

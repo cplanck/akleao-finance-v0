@@ -13,6 +13,7 @@ sys.path.insert(0, "../../shared")
 from shared.models.reddit_post import RedditPost, RedditComment
 from shared.models.stock import Stock
 from shared.models.scraper_run import ScraperRun
+from shared.websocket_client import emit_scraper_status
 
 # Configuration
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
@@ -109,10 +110,6 @@ def process_submission(submission, subreddit_name: str, db: Session) -> bool:
 
         comment_stocks = extract_stock_tickers(comment.body)
 
-        # Skip if no stocks mentioned and parent post has no stocks
-        if not comment_stocks and not mentioned_stocks:
-            continue
-
         # Check if comment already exists
         existing_comment = db.query(RedditComment).filter(
             RedditComment.id == comment.id
@@ -130,7 +127,7 @@ def process_submission(submission, subreddit_name: str, db: Session) -> bool:
             author=str(comment.author) if comment.author else "[deleted]",
             content=comment.body[:5000],  # Truncate if too long
             score=comment.score,
-            mentioned_stocks=json.dumps(comment_stocks),
+            mentioned_stocks=json.dumps(comment_stocks) if comment_stocks else None,
             is_processed=False,
             is_relevant=len(comment_stocks) > 0 or len(mentioned_stocks) > 0,
             created_at=datetime.fromtimestamp(comment.created_utc)
@@ -194,14 +191,41 @@ def main():
     db = Session(engine)
 
     while True:
-        # Create scraper run record
-        scraper_run = ScraperRun(
-            run_type="reddit",
-            status="running",
-            started_at=datetime.utcnow(),
-        )
-        db.add(scraper_run)
-        db.commit()
+        # Check for pending manual triggers first
+        pending_run = db.query(ScraperRun).filter(
+            ScraperRun.run_type == "reddit",
+            ScraperRun.status == "pending"
+        ).order_by(ScraperRun.started_at.desc()).first()
+
+        if pending_run:
+            print(f"\n🎯 Found manual trigger, running immediately...")
+            scraper_run = pending_run
+            scraper_run.status = "running"
+            scraper_run.started_at = datetime.utcnow()
+            db.commit()
+
+            # Emit WebSocket event
+            emit_scraper_status({
+                "status": "running",
+                "message": "Manual scrape started",
+                "started_at": scraper_run.started_at.isoformat()
+            })
+        else:
+            # Create regular scheduled scraper run
+            scraper_run = ScraperRun(
+                run_type="reddit",
+                status="running",
+                started_at=datetime.utcnow(),
+            )
+            db.add(scraper_run)
+            db.commit()
+
+            # Emit WebSocket event
+            emit_scraper_status({
+                "status": "running",
+                "message": "Scheduled scrape started",
+                "started_at": scraper_run.started_at.isoformat()
+            })
 
         posts_count = 0
         errors_count = 0
@@ -233,11 +257,38 @@ def main():
             scraper_run.errors_count = errors_count
             db.commit()
 
+            # Emit WebSocket event
+            emit_scraper_status({
+                "status": scraper_run.status,
+                "message": f"Scrape {'completed' if scraper_run.status == 'completed' else 'failed'}",
+                "posts_collected": posts_count,
+                "duration_seconds": duration,
+                "errors_count": errors_count,
+                "completed_at": completed_time.isoformat()
+            })
+
             print(f"✅ Scrape cycle complete")
             print(f"📊 Collected {posts_count} new posts in {duration:.1f}s")
             print(f"😴 Sleeping for {SCRAPE_INTERVAL_MINUTES} minutes...")
 
-            time.sleep(SCRAPE_INTERVAL_MINUTES * 60)
+            # Sleep in shorter intervals to check for manual triggers
+            sleep_duration = SCRAPE_INTERVAL_MINUTES * 60
+            sleep_interval = 10  # Check every 10 seconds
+            elapsed = 0
+
+            while elapsed < sleep_duration:
+                # Check for pending manual triggers
+                pending_check = db.query(ScraperRun).filter(
+                    ScraperRun.run_type == "reddit",
+                    ScraperRun.status == "pending"
+                ).first()
+
+                if pending_check:
+                    print(f"🎯 Manual trigger detected during sleep, waking up early!")
+                    break
+
+                time.sleep(sleep_interval)
+                elapsed += sleep_interval
 
         except KeyboardInterrupt:
             print("\n👋 Shutting down Reddit Scraper Worker...")

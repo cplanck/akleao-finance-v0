@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from config import settings
 from database import init_db
 from routers import auth, stocks, insights, sentiment, research, admin
+from websocket_manager import sio, socket_app
+import socketio
 
 
 @asynccontextmanager
@@ -62,3 +64,7 @@ async def root():
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+# Combine FastAPI and Socket.IO into a single ASGI application
+app = socketio.ASGIApp(sio, app)

@@ -6,9 +6,12 @@ import {
   LogOutIcon,
   MoreVerticalIcon,
   UserCircleIcon,
+  Moon,
+  Sun,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "@/lib/auth-client"
+import { useTheme } from "next-themes"
 
 import {
   Avatar,
@@ -23,6 +26,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
   SidebarMenu,
@@ -36,6 +42,7 @@ export function NavUser() {
   const { isMobile } = useSidebar()
   const router = useRouter()
   const { data: session, isPending } = useSession()
+  const { setTheme, theme } = useTheme()
 
   const handleSignOut = async () => {
     await signOut()
@@ -140,6 +147,54 @@ export function NavUser() {
                 <BellIcon />
                 Notifications
               </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  {theme === "light" ? (
+                    <Sun className="h-4 w-4" />
+                  ) : theme === "dark" ? (
+                    <Moon className="h-4 w-4" />
+                  ) : (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                  <span>Theme</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="backdrop-blur-xl bg-card/95 border-primary/10">
+                  <DropdownMenuItem
+                    onClick={() => setTheme("light")}
+                    className="group transition-all duration-300 cursor-pointer"
+                  >
+                    <Sun className="h-4 w-4 text-muted-foreground transition-all duration-300 group-hover:rotate-45 group-hover:scale-110 group-hover:text-accent-foreground" />
+                    <span className="font-medium">Light</span>
+                    {theme === "light" && (
+                      <span className="ml-auto text-primary text-xs font-bold transition-colors duration-300 group-hover:text-accent-foreground">✓</span>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setTheme("dark")}
+                    className="group transition-all duration-300 cursor-pointer"
+                  >
+                    <Moon className="h-4 w-4 text-muted-foreground transition-all duration-300 group-hover:-rotate-12 group-hover:scale-110 group-hover:text-accent-foreground" />
+                    <span className="font-medium">Dark</span>
+                    {theme === "dark" && (
+                      <span className="ml-auto text-primary text-xs font-bold transition-colors duration-300 group-hover:text-accent-foreground">✓</span>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setTheme("system")}
+                    className="group transition-all duration-300 cursor-pointer"
+                  >
+                    <svg className="h-4 w-4 text-muted-foreground transition-all duration-300 group-hover:scale-110 group-hover:text-accent-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span className="font-medium">System</span>
+                    {theme === "system" && (
+                      <span className="ml-auto text-primary text-xs font-bold transition-colors duration-300 group-hover:text-accent-foreground">✓</span>
+                    )}
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut}>

@@ -2,28 +2,22 @@
 
 import * as React from "react"
 import {
-  ArrowUpCircleIcon,
-  BarChartIcon,
-  CameraIcon,
-  ClipboardListIcon,
   DatabaseIcon,
-  FileCodeIcon,
-  FileIcon,
-  FileTextIcon,
-  FolderIcon,
-  HelpCircleIcon,
   LayoutDashboardIcon,
-  ListIcon,
-  SearchIcon,
-  SettingsIcon,
-  UsersIcon,
+  LayoutGridIcon,
+  FileTextIcon,
+  MessageSquareIcon,
+  TrendingUpIcon,
+  BrainCircuitIcon,
 } from "lucide-react"
+import { useTheme } from "next-themes"
+import { usePathname } from "next/navigation"
+import Image from "next/image"
 
-import { NavDocuments } from "@/components/nav-documents"
 import { NavMain } from "@/components/nav-main"
 import { NavPinnedStocks } from "@/components/nav-pinned-stocks"
-import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
+import { usePinnedStocks } from "@/hooks/use-pinned-stocks"
 import {
   Sidebar,
   SidebarContent,
@@ -42,115 +36,36 @@ const data = {
       icon: LayoutDashboardIcon,
     },
     {
-      title: "Markets",
-      url: "#",
-      icon: BarChartIcon,
-    },
-    {
-      title: "Watchlist",
-      url: "#",
-      icon: ListIcon,
-    },
-    {
-      title: "Portfolio",
-      url: "#",
-      icon: FolderIcon,
-    },
-    {
-      title: "Research",
-      url: "#",
-      icon: SearchIcon,
-    },
-    {
       title: "Admin",
       url: "/admin",
       icon: DatabaseIcon,
     },
   ],
-  navClouds: [
+  adminNav: [
     {
-      title: "Sectors",
-      icon: FolderIcon,
-      isActive: true,
-      url: "#",
-      items: [
-        {
-          title: "Technology",
-          url: "#",
-        },
-        {
-          title: "Healthcare",
-          url: "#",
-        },
-        {
-          title: "Finance",
-          url: "#",
-        },
-      ],
+      title: "Overview",
+      url: "/admin",
+      icon: LayoutGridIcon,
     },
     {
-      title: "Learning",
+      title: "Posts",
+      url: "/admin/posts",
       icon: FileTextIcon,
-      url: "#",
-      items: [
-        {
-          title: "Beginner's Guide",
-          url: "#",
-        },
-        {
-          title: "Financial Terms",
-          url: "#",
-        },
-      ],
     },
     {
-      title: "News",
-      icon: FileIcon,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  navSecondary: [
-    {
-      title: "Settings",
-      url: "#",
-      icon: SettingsIcon,
+      title: "Comments",
+      url: "/admin/comments",
+      icon: MessageSquareIcon,
     },
     {
-      title: "Get Help",
-      url: "#",
-      icon: HelpCircleIcon,
+      title: "Stocks",
+      url: "/admin/stocks",
+      icon: TrendingUpIcon,
     },
     {
-      title: "Search",
-      url: "#",
-      icon: SearchIcon,
-    },
-  ],
-  documents: [
-    {
-      name: "Data Library",
-      url: "#",
-      icon: DatabaseIcon,
-    },
-    {
-      name: "Reports",
-      url: "#",
-      icon: ClipboardListIcon,
-    },
-    {
-      name: "Word Assistant",
-      url: "#",
-      icon: FileIcon,
+      title: "ML Models",
+      url: "/admin/ml",
+      icon: BrainCircuitIcon,
     },
   ],
 }
@@ -161,16 +76,22 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSidebarProps) {
-  const pinnedStocks = [
-    { symbol: "AAPL" },
-    { symbol: "MSFT" },
-    { symbol: "GOOGL" },
-    { symbol: "TSLA" },
-    { symbol: "NVDA" },
-    { symbol: "AMZN" },
-    { symbol: "META" },
-    { symbol: "NFLX" },
-  ]
+  const { theme, resolvedTheme } = useTheme()
+  const pathname = usePathname()
+  const [mounted, setMounted] = React.useState(false)
+  const { pinnedStocks } = usePinnedStocks()
+
+  // Check if we're in admin view
+  const isAdminView = pathname?.startsWith('/admin')
+
+  // Ensure component is mounted before accessing theme
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Determine which logo to show based on current theme
+  const currentTheme = resolvedTheme || theme
+  const logoSrc = currentTheme === "dark" ? "/logo-dark.svg" : "/logo-light.svg"
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -179,11 +100,19 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5"
+              className="data-[slot=sidebar-menu-button]:!p-2 hover:bg-transparent"
             >
-              <a href="#">
-                <ArrowUpCircleIcon className="h-5 w-5" />
-                <span className="text-base font-semibold">Akleao Finance</span>
+              <a href="/" className="flex items-center gap-2">
+                {mounted && (
+                  <Image
+                    src={logoSrc}
+                    alt="Akleao Finance Logo"
+                    width={140}
+                    height={40}
+                    className="object-contain"
+                    priority
+                  />
+                )}
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -191,13 +120,15 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavPinnedStocks
-          items={pinnedStocks}
-          selectedStock={selectedStock}
-          onSelectStock={onSelectStock}
-        />
-        <NavDocuments items={data.documents} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        {isAdminView ? (
+          <NavMain items={data.adminNav} />
+        ) : (
+          <NavPinnedStocks
+            items={pinnedStocks}
+            selectedStock={selectedStock}
+            onSelectStock={onSelectStock}
+          />
+        )}
       </SidebarContent>
       <SidebarFooter>
         <NavUser />
