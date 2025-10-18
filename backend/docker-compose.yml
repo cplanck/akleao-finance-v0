@@ -80,6 +80,27 @@ services:
       - ./shared:/app/shared
     restart: unless-stopped
 
+  # Deep Research Worker
+  deep-research:
+    build:
+      context: ./workers/deep-research
+      dockerfile: Dockerfile
+    container_name: akleao-deep-research
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - POLL_INTERVAL_SECONDS=${RESEARCH_POLL_INTERVAL_SECONDS:-10}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers/deep-research:/app
+      - ./shared:/app/shared
+    restart: unless-stopped
+
   # Future workers (Phase 2+) - commented out for now
   # Uncomment these as you build them
 

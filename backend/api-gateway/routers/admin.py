@@ -7,6 +7,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from database import get_db
 import sys
+import json
 sys.path.insert(0, "../shared")
 from shared.models.reddit_post import RedditPost, RedditComment
 from shared.models.stock import Stock
@@ -54,7 +55,7 @@ async def get_reddit_posts(
                 "url": post.url,
                 "score": post.score,
                 "num_comments": post.num_comments,
-                "mentioned_stocks": post.mentioned_stocks,
+                "mentioned_stocks": json.loads(post.mentioned_stocks) if post.mentioned_stocks else [],
                 "primary_stock": post.primary_stock,
                 "created_at": post.created_at.isoformat(),
             }
@@ -212,7 +213,7 @@ async def get_comments(
                 "author": row.RedditComment.author,
                 "content": row.RedditComment.content,
                 "score": row.RedditComment.score,
-                "mentioned_stocks": row.RedditComment.mentioned_stocks,
+                "mentioned_stocks": json.loads(row.RedditComment.mentioned_stocks) if row.RedditComment.mentioned_stocks else [],
                 "sentiment_label": row.RedditComment.sentiment_label,
                 "sentiment_score": row.RedditComment.sentiment_score,
                 "created_at": row.RedditComment.created_at.isoformat(),
@@ -246,7 +247,7 @@ async def get_post_comments(
             "author": comment.author,
             "content": comment.content,
             "score": comment.score,
-            "mentioned_stocks": comment.mentioned_stocks,
+            "mentioned_stocks": json.loads(comment.mentioned_stocks) if comment.mentioned_stocks else [],
             "sentiment_label": comment.sentiment_label,
             "sentiment_score": comment.sentiment_score,
             "created_at": comment.created_at.isoformat(),

@@ -8,6 +8,15 @@ from .sentiment import SentimentAnalysis
 from .research import ResearchReport
 from .insight import UserInsight
 from .scraper_run import ScraperRun
+from .auth import (
+    BetterAuthUser,
+    BetterAuthSession,
+    BetterAuthAccount,
+    BetterAuthVerification,
+    PinnedStock,
+    UserApiKey,
+    OpenAIUsage,
+)
 
 __all__ = [
     "User",
@@ -19,4 +28,12 @@ __all__ = [
     "ResearchReport",
     "UserInsight",
     "ScraperRun",
+    # Better Auth tables
+    "BetterAuthUser",
+    "BetterAuthSession",
+    "BetterAuthAccount",
+    "BetterAuthVerification",
+    "PinnedStock",
+    "UserApiKey",
+    "OpenAIUsage",
 ]

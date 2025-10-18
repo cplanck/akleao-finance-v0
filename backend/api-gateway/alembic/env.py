@@ -38,6 +38,9 @@ from shared.models import (
 
 target_metadata = Base.metadata
 
+# NOTE: Better Auth tables are now tracked in shared/models/auth.py
+# This ensures Alembic knows about them and won't try to drop them.
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -83,7 +86,8 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
         )
 
         with context.begin_transaction():

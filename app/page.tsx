@@ -12,6 +12,8 @@ import KeyMetrics from "@/components/key-metrics";
 import FundamentalsSummary from "@/components/fundamentals-summary";
 import { MarketStatus } from "@/components/market-status";
 import { CommandMenu } from "@/components/command-menu";
+import { RedditSentiment } from "@/components/reddit-sentiment";
+import { ResearchGenerator } from "@/components/research-generator";
 import { fetchStockQuote, fetchStockOverview } from "@/lib/stock-api";
 
 function getTimeAgo(date: Date): string {
@@ -90,15 +92,21 @@ export default function Home() {
         {/* AI Fundamentals Summary */}
         <FundamentalsSummary symbol={selectedStock} />
 
-        {/* Chart with Floating Toggle */}
-        <div className="relative">
-          <StockChart
-            symbol={selectedStock}
-            quote={quote}
-            overview={overview}
-            quoteLoading={quoteLoading}
-            overviewLoading={overviewLoading}
-          />
+        {/* Chart and Reddit Discussions - 50/50 Split */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+          {/* Chart */}
+          <div className="relative">
+            <StockChart
+              symbol={selectedStock}
+              quote={quote}
+              overview={overview}
+              quoteLoading={quoteLoading}
+              overviewLoading={overviewLoading}
+            />
+          </div>
+
+          {/* Reddit Discussions */}
+          <RedditSentiment symbol={selectedStock} limit={5} />
         </div>
 
         {/* Fundamentals Section */}
@@ -142,6 +150,9 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* Research Report Generator */}
+        <ResearchGenerator symbol={selectedStock} />
 
         {/* Company Info */}
         {overview && (

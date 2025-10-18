@@ -46,7 +46,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(stocks.router, prefix="/api/stocks", tags=["Stocks"])
 app.include_router(insights.router, prefix="/api/insights", tags=["Insights"])
 app.include_router(sentiment.router, prefix="/api/sentiment", tags=["Sentiment"])
-app.include_router(research.router, prefix="/api/research", tags=["Research"])
+app.include_router(research.router, tags=["Research"])  # prefix already defined in router
 app.include_router(admin.router, tags=["Admin"])
 
 
