@@ -175,7 +175,7 @@ export function CommentsDataTable({ data, onRowClick }: CommentsDataTableProps) 
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Posted
+            Crawled
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );

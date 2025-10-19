@@ -108,6 +108,28 @@ services:
     deploy:
       replicas: 2  # Run 2 concurrent workers for faster processing
 
+  # Comment Scraper - Continuously rescapes comments for tracked posts
+  comment-scraper:
+    build:
+      context: ./workers/comment-scraper
+      dockerfile: Dockerfile
+    container_name: akleao-comment-scraper
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - REDIS_URL=redis://redis:6379
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
+      - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-AkleaoFinance/1.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers/comment-scraper:/app
+      - ./shared:/app/shared
+    restart: unless-stopped
+
   # Deep Research Worker - Multiple instances for concurrent processing
   deep-research:
     build:

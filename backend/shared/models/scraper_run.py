@@ -17,5 +17,6 @@ class ScraperRun(Base):
     completed_at = Column(DateTime)
     duration_seconds = Column(Float)
     posts_collected = Column(Integer, default=0)
+    comments_collected = Column(Integer, default=0)
     errors_count = Column(Integer, default=0)
     error_message = Column(String(500))

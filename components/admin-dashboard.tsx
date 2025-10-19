@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Database, TrendingUp, FileText, Activity, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Database, TrendingUp, FileText, Activity, Clock, CheckCircle2, XCircle, Loader2, MessageSquare, Eye, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { OpenAISettingsCard } from "@/components/openai-settings-card";
 import { TrackedSubredditsTable } from "@/components/tracked-subreddits-table";
+import { PostsScraperStatus } from "@/components/posts-scraper-status";
+import { CommentScraperStatus } from "@/components/comment-scraper-status";
 import { toast } from "sonner";
 import { io, Socket } from "socket.io-client";
 
@@ -17,8 +19,15 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 interface AdminStats {
   total_posts: number;
+  total_comments: number;
   total_stocks: number;
+  tracked_posts: number;
+  tracked_subreddits_count: number;
   recent_posts_24h: number;
+  recent_comments_24h: number;
+  recent_comments_1h: number;
+  posts_with_growth_1h: number;
+  total_new_comments: number;
   posts_by_subreddit: { subreddit: string; count: number }[];
   top_stocks: { symbol: string; mentions: number }[];
 }
@@ -31,10 +40,26 @@ interface ScraperHealth {
     completed_at: string | null;
     duration_seconds: number | null;
     posts_collected: number;
+    comments_collected: number;
     errors_count: number;
     status: string | null;
   };
   next_run: string;
+  running_jobs: Array<{
+    id: number;
+    run_type: string;
+    started_at: string;
+    posts_collected: number;
+    comments_collected: number;
+  }>;
+  current_post: {
+    post_id: string;
+    subreddit: string;
+    title: string;
+    existing_comments: number;
+    new_comments: number;
+    started_at: string;
+  } | null;
   stats: {
     avg_duration_seconds: number;
     success_rate: number;
@@ -45,6 +70,7 @@ interface ScraperHealth {
     status: string;
     duration_seconds: number;
     posts_collected: number;
+    comments_collected: number;
   }>;
 }
 
@@ -176,7 +202,7 @@ export function AdminDashboard() {
   const { data: health, isLoading: healthLoading } = useQuery({
     queryKey: ["scraper-health"],
     queryFn: fetchScraperHealth,
-    // Remove refetchInterval - WebSocket will handle updates
+    refetchInterval: 2000, // Poll every 2 seconds to catch current_post updates
   });
 
   // Initialize elapsed time when health data loads with a running scraper
@@ -229,195 +255,215 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Top Row: OpenAI Settings & Scraper Health */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <OpenAISettingsCard />
-
-        <Card className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-br from-card/95 via-card/90 to-card/95 border-primary/10 shadow-xl hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 group">
-          {/* Ambient gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
-
-          <CardHeader className="relative z-10">
+      {/* Overview Cards - Top Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Tracked Posts */}
+        <Card className="border-primary/10 hover:border-primary/20 transition-all duration-300">
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-lg sm:text-xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                  {health && getStatusIcon(health.status)}
-                </div>
-                Reddit Scraper
-              </CardTitle>
-              <div className="min-w-[80px] flex justify-center">
-                {health && getStatusBadge(health.status)}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="relative z-10">
-            {healthLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-              </div>
-            ) : health ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="p-3 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300">
-                    <div className="text-muted-foreground text-xs font-semibold uppercase tracking-wide mb-1">
-                      {health.status === "running" ? "Elapsed Time" : "Last Run"}
-                    </div>
-                    <div className="text-sm font-bold">
-                      {health.status === "running" && runStartTime
-                        ? formatElapsedTime(elapsedTime)
-                        : health.last_run?.completed_at
-                        ? mounted ? formatLocalTime(health.last_run.completed_at) : "-"
-                        : "Never"}
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300">
-                    <div className="text-muted-foreground text-xs font-semibold uppercase tracking-wide mb-1">
-                      {health.status === "running" || health.status === "pending" ? "Status" : "Next Run"}
-                    </div>
-                    <div className="text-sm font-bold">
-                      {health.status === "running"
-                        ? "Scraping..."
-                        : health.status === "pending"
-                        ? "Queued"
-                        : mounted ? formatTimeUntil(health.next_run) : "-"}
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300">
-                    <div className="text-muted-foreground text-xs font-semibold uppercase tracking-wide mb-1">Success Rate</div>
-                    <div className="text-sm font-bold">{health.stats.success_rate}%</div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300">
-                    <div className="text-muted-foreground text-xs font-semibold uppercase tracking-wide mb-1">Avg Duration</div>
-                    <div className="text-sm font-bold">{health.stats.avg_duration_seconds.toFixed(1)}s</div>
-                  </div>
-                </div>
-
-                {/* Recent Runs Table */}
-                {health.recent_runs && health.recent_runs.length > 0 && (
-                  <div className="pt-4 border-t border-primary/10">
-                    <div className="text-sm font-semibold mb-3">Recent Runs</div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-primary/10">
-                            <th className="text-left py-2 text-xs text-muted-foreground font-semibold">Started</th>
-                            <th className="text-left py-2 text-xs text-muted-foreground font-semibold">Status</th>
-                            <th className="text-right py-2 text-xs text-muted-foreground font-semibold">Duration</th>
-                            <th className="text-right py-2 text-xs text-muted-foreground font-semibold">Posts</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {health.recent_runs.slice(0, 5).map((run, idx) => (
-                            <tr key={idx} className="border-b border-primary/5 hover:bg-muted/30 transition-colors">
-                              <td className="py-2 text-xs">{mounted ? formatLocalTime(run.started_at) : "-"}</td>
-                              <td className="py-2">
-                                {run.status === "completed" ? (
-                                  <Badge className="bg-green-500 text-xs px-2 py-0">
-                                    <CheckCircle2 className="h-2 w-2 mr-1" />
-                                    Done
-                                  </Badge>
-                                ) : run.status === "running" ? (
-                                  <Badge className="bg-blue-500 text-xs px-2 py-0">
-                                    <Loader2 className="h-2 w-2 mr-1 animate-spin" />
-                                    Running
-                                  </Badge>
-                                ) : run.status === "pending" ? (
-                                  <Badge className="bg-yellow-500 text-xs px-2 py-0">
-                                    <Clock className="h-2 w-2 mr-1" />
-                                    Queued
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="destructive" className="text-xs px-2 py-0">
-                                    <XCircle className="h-2 w-2 mr-1" />
-                                    Failed
-                                  </Badge>
-                                )}
-                              </td>
-                              <td className="py-2 text-right text-xs">{run.duration_seconds ? run.duration_seconds.toFixed(1) + 's' : '-'}</td>
-                              <td className="py-2 text-right text-xs font-semibold">{run.posts_collected ?? 0}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Currently Tracking
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-3xl font-bold tracking-tight">
+                      {stats?.tracked_posts.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      posts
+                    </p>
                   </div>
                 )}
+                {!isLoading && (
+                  <p className="text-xs text-muted-foreground">
+                    of {stats?.total_posts.toLocaleString()} total
+                  </p>
+                )}
               </div>
-            ) : (
-              <div className="text-muted-foreground text-center py-8">No scraper data available</div>
-            )}
+              <div className={`h-12 w-12 rounded-xl bg-gradient-to-br flex items-center justify-center ${
+                stats?.tracked_posts
+                  ? 'from-blue-500/20 to-blue-600/20 ring-1 ring-blue-500/30'
+                  : 'from-muted/30 to-muted/20'
+              }`}>
+                <Eye className={`h-6 w-6 ${stats?.tracked_posts ? 'text-blue-500' : 'text-muted-foreground'}`} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Comment Activity */}
+        <Card className="border-primary/10 hover:border-primary/20 transition-all duration-300">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Last Hour
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-3xl font-bold tracking-tight">
+                      {stats?.recent_comments_1h.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      comments
+                    </p>
+                  </div>
+                )}
+                {!isLoading && (
+                  <p className="text-xs text-muted-foreground">
+                    {stats?.total_comments.toLocaleString()} total comments
+                  </p>
+                )}
+              </div>
+              <div className={`h-12 w-12 rounded-xl bg-gradient-to-br flex items-center justify-center ${
+                stats?.recent_comments_1h && stats.recent_comments_1h > 0
+                  ? 'from-green-500/20 to-green-600/20 ring-1 ring-green-500/30'
+                  : 'from-muted/30 to-muted/20'
+              }`}>
+                <MessageSquare className={`h-6 w-6 ${
+                  stats?.recent_comments_1h && stats.recent_comments_1h > 0
+                    ? 'text-green-500'
+                    : 'text-muted-foreground'
+                }`} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Comment Growth */}
+        <Card className="border-primary/10 hover:border-primary/20 transition-all duration-300">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Growing
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-3xl font-bold tracking-tight">
+                      {stats?.posts_with_growth_1h.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      posts
+                    </p>
+                  </div>
+                )}
+                {!isLoading && (
+                  <p className="text-xs text-muted-foreground">
+                    +{stats?.total_new_comments.toLocaleString()} new comments total
+                  </p>
+                )}
+              </div>
+              <div className={`h-12 w-12 rounded-xl bg-gradient-to-br flex items-center justify-center ${
+                stats?.posts_with_growth_1h && stats.posts_with_growth_1h > 0
+                  ? 'from-green-500/20 to-green-600/20 ring-1 ring-green-500/30'
+                  : 'from-muted/30 to-muted/20'
+              }`}>
+                <TrendingUp className={`h-6 w-6 ${
+                  stats?.posts_with_growth_1h && stats.posts_with_growth_1h > 0
+                    ? 'text-green-500 animate-pulse'
+                    : 'text-muted-foreground'
+                }`} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Unique Stocks */}
+        <Card className="border-primary/10 hover:border-primary/20 transition-all duration-300">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Stocks Tracked
+                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-3xl font-bold tracking-tight">
+                      {stats?.total_stocks.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      symbols
+                    </p>
+                  </div>
+                )}
+                {!isLoading && (
+                  <p className="text-xs text-muted-foreground">
+                    from {stats?.tracked_subreddits_count} subreddits
+                  </p>
+                )}
+              </div>
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-600/20 ring-1 ring-orange-500/30 flex items-center justify-center">
+                <Sparkles className="h-6 w-6 text-orange-500" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Posts</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold">{stats?.total_posts.toLocaleString()}</div>
-            )}
-            {isLoading ? (
-              <Skeleton className="h-4 w-32 mt-1" />
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1">
-                {`${stats?.recent_posts_24h} in last 24h`}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Second Row: OpenAI Settings & Reddit Scraper */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <OpenAISettingsCard />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unique Stocks</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        {/* Reddit Scraper */}
+        <Card className="border-primary/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              Reddit Scraper
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold">{stats?.total_stocks.toLocaleString()}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">Tracked symbols</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Subreddits</CardTitle>
-            <Database className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold">{stats?.posts_by_subreddit.length}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">Active sources</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Activity</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold">
-                {stats?.recent_posts_24h ? Math.round(stats.recent_posts_24h / 24) : 0}
+          <CardContent className="space-y-6">
+            {healthLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
               </div>
+            ) : (
+              <>
+                {/* Posts Scraper Section */}
+                <div>
+                  <div className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-blue-500" />
+                    Posts Scraper
+                  </div>
+                  {health ? (
+                    <PostsScraperStatus
+                      status={health.status as "idle" | "running" | "queued" | "error"}
+                      nextRun={health.next_run}
+                      lastRun={health.last_run ? {
+                        completed_at: health.last_run.completed_at,
+                        posts_collected: health.last_run.posts_collected,
+                        comments_collected: health.last_run.comments_collected
+                      } : undefined}
+                    />
+                  ) : (
+                    <div className="text-muted-foreground text-center py-4">No data available</div>
+                  )}
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-primary/10" />
+
+                {/* Comment Scraper Section */}
+                <div>
+                  <div className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-green-500" />
+                    Comment Scraper
+                  </div>
+                  <CommentScraperStatus currentPost={health?.current_post} />
+                </div>
+              </>
             )}
-            <p className="text-xs text-muted-foreground mt-1">Posts per hour</p>
           </CardContent>
         </Card>
       </div>

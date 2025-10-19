@@ -13,7 +13,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, ChevronDown, ExternalLink, MessageSquare } from "lucide-react";
+import { ArrowUpDown, ChevronDown, ExternalLink, MessageSquare, Eye, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -42,9 +42,15 @@ interface RedditPost {
   url: string;
   score: number;
   num_comments: number;
+  initial_num_comments: number;
   mentioned_stocks: string | string[]; // Can be array or JSON string
   primary_stock: string | null;
-  created_at: string;
+  posted_at: string;  // When posted on Reddit
+  created_at: string;  // When we first indexed it
+  track_comments: boolean;
+  track_until: string | null;
+  last_comment_scrape_at: string | null;
+  comment_scrape_count: number;
 }
 
 interface PostsDataTableProps {
@@ -90,6 +96,22 @@ export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
 
   const columns: ColumnDef<RedditPost>[] = [
     {
+      id: "row_number",
+      header: "#",
+      cell: ({ row }) => {
+        // Calculate row number based on current page and row index
+        const pageIndex = table.getState().pagination.pageIndex;
+        const pageSize = table.getState().pagination.pageSize;
+        return (
+          <div className="text-sm text-muted-foreground font-mono w-8">
+            {pageIndex * pageSize + row.index + 1}
+          </div>
+        );
+      },
+      enableSorting: false,
+      enableHiding: false,
+    },
+    {
       accessorKey: "title",
       header: ({ column }) => {
         return (
@@ -104,9 +126,29 @@ export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
       },
       cell: ({ row }) => {
         const post = row.original;
+        // Backend returns UTC timestamps without 'Z' suffix, so add it
+        const trackUntilUTC = post.track_until?.endsWith('Z') ? post.track_until : `${post.track_until}Z`;
+        const isTracking = post.track_comments && post.track_until && new Date(trackUntilUTC) > new Date();
+        const commentGrowth = post.num_comments - post.initial_num_comments;
+        const hasNewComments = commentGrowth > 0;
+
         return (
           <div className="space-y-1">
-            <div className="font-medium">{post.title}</div>
+            <div className="flex items-center gap-2">
+              <div className="font-medium">{post.title}</div>
+              {isTracking && (
+                <Badge variant="outline" className="text-xs gap-1 bg-blue-50 text-blue-700 border-blue-200">
+                  <Eye className="h-3 w-3" />
+                  Tracking
+                </Badge>
+              )}
+              {hasNewComments && (
+                <Badge variant="outline" className="text-xs gap-1 bg-green-50 text-green-700 border-green-200">
+                  <TrendingUp className="h-3 w-3" />
+                  +{commentGrowth} new
+                </Badge>
+              )}
+            </div>
             <div className="text-xs text-muted-foreground">
               r/{post.subreddit}
             </div>
@@ -162,7 +204,7 @@ export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
       },
     },
     {
-      accessorKey: "created_at",
+      accessorKey: "posted_at",
       header: ({ column }) => {
         return (
           <Button
@@ -175,7 +217,90 @@ export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
         );
       },
       cell: ({ row }) => {
+        return <div className="text-sm text-muted-foreground">{formatTimeAgo(row.getValue("posted_at"))}</div>;
+      },
+    },
+    {
+      accessorKey: "num_comments",
+      id: "comment_growth",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Activity
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        const post = row.original;
+        const commentGrowth = post.num_comments - post.initial_num_comments;
+
+        if (commentGrowth === 0) {
+          return <div className="text-sm text-muted-foreground">—</div>;
+        }
+
+        return (
+          <div className="flex items-center gap-1 text-sm font-medium text-green-600">
+            <TrendingUp className="h-3 w-3" />
+            +{commentGrowth}
+          </div>
+        );
+      },
+      sortingFn: (rowA, rowB) => {
+        const growthA = rowA.original.num_comments - rowA.original.initial_num_comments;
+        const growthB = rowB.original.num_comments - rowB.original.initial_num_comments;
+        return growthA - growthB;
+      },
+    },
+    {
+      accessorKey: "created_at",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            First Crawled
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
         return <div className="text-sm text-muted-foreground">{formatTimeAgo(row.getValue("created_at"))}</div>;
+      },
+    },
+    {
+      accessorKey: "last_comment_scrape_at",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Last Crawled
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        const lastCrawled = row.getValue("last_comment_scrape_at") as string | null;
+        const post = row.original;
+        // Backend returns UTC timestamps without 'Z' suffix, so add it
+        const trackUntilUTC = post.track_until?.endsWith('Z') ? post.track_until : `${post.track_until}Z`;
+        const isTracking = post.track_comments && post.track_until && new Date(trackUntilUTC) > new Date();
+
+        if (!isTracking) {
+          return <div className="text-sm text-muted-foreground">—</div>;
+        }
+
+        if (!lastCrawled) {
+          return <div className="text-sm text-muted-foreground italic">Pending</div>;
+        }
+
+        return <div className="text-sm text-muted-foreground">{formatTimeAgo(lastCrawled)}</div>;
       },
     },
   ];
@@ -294,7 +419,12 @@ export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
       </div>
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="flex-1 text-sm text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} row(s) displayed
+          Showing {table.getRowModel().rows.length} of {table.getFilteredRowModel().rows.length} row(s)
+          {table.getPageCount() > 1 && (
+            <span className="ml-2">
+              (Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()})
+            </span>
+          )}
         </div>
         <div className="space-x-2">
           <Button

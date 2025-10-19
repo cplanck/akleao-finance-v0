@@ -21,6 +21,7 @@ from shared.models.stock import Stock
 from shared.models.scraper_run import ScraperRun
 from shared.models.scraper_job import ScraperJob
 from shared.models.auth import UserApiKey
+from shared.models.reddit_post import RedditPost
 from shared.services.subreddit_discovery import SubredditDiscoveryService
 
 router = APIRouter(prefix="/api/reddit", tags=["reddit"])
@@ -722,3 +723,131 @@ async def get_scraper_jobs(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch scraper jobs: {str(e)}")
+
+# === Comment Tracking Endpoints ===
+
+class TrackPostCommentsRequest(BaseModel):
+    post_id: str
+    track_days: Optional[int] = 7  # Number of days to track this post
+
+
+@router.post("/track-post-comments/{post_id}")
+async def track_post_comments(
+    post_id: str,
+    request: TrackPostCommentsRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Enable comment tracking for a specific post.
+    
+    This marks the post to be actively monitored for new comments.
+    The post will be tracked for the specified number of days.
+    """
+    try:
+        from datetime import timedelta
+        
+        # Get the post
+        result = await db.execute(
+            select(RedditPost).filter(RedditPost.id == post_id)
+        )
+        post = result.scalar_one_or_none()
+        
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        # Enable tracking
+        post.track_comments = True
+        post.track_until = datetime.utcnow() + timedelta(days=request.track_days)
+        
+        await db.commit()
+        
+        return {
+            "message": "Comment tracking enabled",
+            "post_id": post_id,
+            "track_until": post.track_until
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to enable comment tracking: {str(e)}")
+
+
+@router.post("/rescrape-comments/{post_id}")
+async def rescrape_post_comments(
+    post_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Manually trigger a comment rescrape for a specific post.
+    
+    This will create a high-priority scraper job to fetch new comments
+    for this post immediately.
+    """
+    try:
+        # Get the post
+        result = await db.execute(
+            select(RedditPost).filter(RedditPost.id == post_id)
+        )
+        post = result.scalar_one_or_none()
+        
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        # Create a high-priority scraper job for this specific post
+        job = ScraperJob(
+            job_type="comment_rescrape",
+            status="pending",
+            priority=100,  # High priority for manual requests
+            config={
+                "post_id": post_id,
+                "subreddit": post.subreddit
+            }
+        )
+        db.add(job)
+        
+        # Update tracking info
+        post.last_comment_scrape_at = datetime.utcnow()
+        post.comment_scrape_count += 1
+        
+        await db.commit()
+        
+        return {
+            "message": "Comment rescrape job created",
+            "job_id": job.id,
+            "post_id": post_id
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rescrape comments: {str(e)}")
+
+
+@router.get("/tracked-posts")
+async def get_tracked_posts(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, le=200)
+):
+    """Get list of posts currently being tracked for comments."""
+    try:
+        result = await db.execute(
+            select(RedditPost)
+            .filter(RedditPost.track_comments == True)
+            .filter(RedditPost.track_until > datetime.utcnow())
+            .order_by(RedditPost.created_at.desc())
+            .limit(limit)
+        )
+        posts = result.scalars().all()
+        
+        return [{
+            "post_id": post.id,
+            "title": post.title,
+            "subreddit": post.subreddit,
+            "created_at": post.created_at,
+            "num_comments": post.num_comments,
+            "track_until": post.track_until,
+            "last_comment_scrape_at": post.last_comment_scrape_at,
+            "comment_scrape_count": post.comment_scrape_count
+        } for post in posts]
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch tracked posts: {str(e)}")

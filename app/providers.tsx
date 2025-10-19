@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
+import { CommandMenu } from "@/components/command-menu";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -17,6 +18,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
+  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider
@@ -26,6 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         disableTransitionOnChange
       >
         {children}
+        <CommandMenu open={commandMenuOpen} onOpenChange={setCommandMenuOpen} />
       </ThemeProvider>
     </QueryClientProvider>
   );

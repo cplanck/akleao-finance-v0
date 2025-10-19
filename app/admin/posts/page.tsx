@@ -9,6 +9,8 @@ import { SiteHeader } from "@/components/site-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { PostsDataTable } from "@/components/posts-data-table";
 import { PostDetailsDialog } from "@/components/post-details-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,9 +41,15 @@ interface RedditPost {
   url: string;
   score: number;
   num_comments: number;
+  initial_num_comments: number;
   mentioned_stocks: string | string[]; // Can be array or JSON string
   primary_stock: string | null;
-  created_at: string;
+  posted_at: string;  // When posted on Reddit
+  created_at: string;  // When we first indexed it
+  track_comments: boolean;
+  track_until: string | null;
+  last_comment_scrape_at: string | null;
+  comment_scrape_count: number;
 }
 
 interface PostsResponse {
@@ -65,12 +73,14 @@ async function fetchTrackedSubreddits(): Promise<TrackedSubreddit[]> {
 async function fetchPosts(
   subreddit: string,
   stock: string,
+  trackedOnly: boolean,
   offset: number,
   limit: number
 ): Promise<PostsResponse> {
   const params = new URLSearchParams();
   if (subreddit) params.append("subreddit", subreddit);
   if (stock) params.append("stock", stock);
+  if (trackedOnly) params.append("tracked_only", "true");
   params.append("offset", offset.toString());
   params.append("limit", limit.toString());
 
@@ -86,6 +96,7 @@ function PostsPageContent() {
 
   const [subredditFilter, setSubredditFilter] = useState(initialSubreddit);
   const [stockFilter, setStockFilter] = useState(initialStock);
+  const [showTrackedOnly, setShowTrackedOnly] = useState(false);
   const [selectedPost, setSelectedPost] = useState<RedditPost | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [subredditOpen, setSubredditOpen] = useState(false);
@@ -96,8 +107,8 @@ function PostsPageContent() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["reddit-posts", subredditFilter, stockFilter],
-    queryFn: () => fetchPosts(subredditFilter, stockFilter, 0, 200), // Max limit is 200
+    queryKey: ["reddit-posts", subredditFilter, stockFilter, showTrackedOnly],
+    queryFn: () => fetchPosts(subredditFilter, stockFilter, showTrackedOnly, 0, 10000), // Fetch all posts (max 10k)
   });
 
   const activeSubreddits = subredditsData?.filter(sub => sub.is_active) || [];
@@ -107,13 +118,20 @@ function PostsPageContent() {
     setDialogOpen(true);
   };
 
+  // Server-side filtering is now handling tracked posts
+  const filteredPosts = data?.posts || [];
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Reddit Posts</h1>
         <div className="text-sm text-muted-foreground">
-          {data && `${data.total.toLocaleString()} total posts`}
+          {data && (
+            showTrackedOnly
+              ? `${filteredPosts.length.toLocaleString()} tracked posts`
+              : `${data.total.toLocaleString()} total posts`
+          )}
         </div>
       </div>
 
@@ -180,8 +198,21 @@ function PostsPageContent() {
                 onChange={(e) => setStockFilter(e.target.value.toUpperCase())}
               />
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="tracked-only"
+                checked={showTrackedOnly}
+                onCheckedChange={(checked) => setShowTrackedOnly(checked as boolean)}
+              />
+              <Label
+                htmlFor="tracked-only"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+              >
+                Tracked only
+              </Label>
+            </div>
           </div>
-          {(subredditFilter || stockFilter) && (
+          {(subredditFilter || stockFilter || showTrackedOnly) && (
             <Button
               variant="outline"
               size="sm"
@@ -189,6 +220,7 @@ function PostsPageContent() {
               onClick={() => {
                 setSubredditFilter("");
                 setStockFilter("");
+                setShowTrackedOnly(false);
               }}
             >
               Clear Filters
@@ -206,11 +238,13 @@ function PostsPageContent() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : data && data.posts ? (
-            <PostsDataTable data={data.posts} onRowClick={handleRowClick} />
+          ) : filteredPosts.length > 0 ? (
+            <PostsDataTable data={filteredPosts} onRowClick={handleRowClick} />
           ) : (
             <div className="text-center py-12 text-muted-foreground">
-              No posts found
+              {showTrackedOnly
+                ? "No tracked posts found"
+                : "No posts found"}
             </div>
           )}
         </CardContent>

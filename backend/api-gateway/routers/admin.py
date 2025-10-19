@@ -8,23 +8,45 @@ from datetime import datetime, timedelta
 from database import get_db
 import sys
 import json
+import ast
+import os
 sys.path.insert(0, "../shared")
 from shared.models.reddit_post import RedditPost, RedditComment
 from shared.models.stock import Stock
 from shared.models.scraper_run import ScraperRun
+from shared.models.tracked_subreddit import TrackedSubreddit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def parse_mentioned_stocks(mentioned_stocks):
+    """Parse mentioned_stocks field which may be JSON or Python list syntax."""
+    if not mentioned_stocks or not mentioned_stocks.strip():
+        return []
+    try:
+        # Try JSON first
+        return json.loads(mentioned_stocks)
+    except:
+        try:
+            # Try Python literal eval (handles single quotes)
+            return ast.literal_eval(mentioned_stocks)
+        except:
+            # If all else fails, return empty list
+            return []
 
 
 @router.get("/reddit-posts")
 async def get_reddit_posts(
     subreddit: Optional[str] = None,
     stock: Optional[str] = None,
-    limit: int = Query(50, le=200),
+    tracked_only: bool = False,
+    limit: int = Query(50, le=10000),  # Allow fetching all posts
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
     """Get Reddit posts with optional filters."""
+    from datetime import datetime as dt
+
     # Build query
     stmt = select(RedditPost)
 
@@ -33,6 +55,11 @@ async def get_reddit_posts(
         stmt = stmt.where(RedditPost.subreddit == subreddit)
     if stock:
         stmt = stmt.where(RedditPost.primary_stock == stock)
+    if tracked_only:
+        stmt = stmt.where(
+            RedditPost.track_comments == True,
+            RedditPost.track_until > dt.utcnow()
+        )
 
     # Get total count
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -40,7 +67,11 @@ async def get_reddit_posts(
     total = total_result.scalar()
 
     # Get paginated results
-    stmt = stmt.order_by(desc(RedditPost.created_at)).offset(offset).limit(limit)
+    # Order by: tracked posts first (track_comments DESC), then by created_at DESC
+    stmt = stmt.order_by(
+        desc(RedditPost.track_comments),
+        desc(RedditPost.created_at)
+    ).offset(offset).limit(limit)
     result = await db.execute(stmt)
     posts = result.scalars().all()
 
@@ -55,9 +86,15 @@ async def get_reddit_posts(
                 "url": post.url,
                 "score": post.score,
                 "num_comments": post.num_comments,
+                "initial_num_comments": post.initial_num_comments,
                 "mentioned_stocks": json.loads(post.mentioned_stocks) if post.mentioned_stocks else [],
                 "primary_stock": post.primary_stock,
-                "created_at": post.created_at.isoformat(),
+                "posted_at": post.posted_at.isoformat(),  # When posted on Reddit
+                "created_at": post.created_at.isoformat(),  # When we first indexed it
+                "track_comments": post.track_comments,
+                "track_until": post.track_until.isoformat() if post.track_until else None,
+                "last_comment_scrape_at": post.last_comment_scrape_at.isoformat() if post.last_comment_scrape_at else None,
+                "comment_scrape_count": post.comment_scrape_count,
             }
             for post in posts
         ],
@@ -122,10 +159,31 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     result = await db.execute(count_stmt)
     total_posts = result.scalar()
 
+    # Total comments
+    comment_count_stmt = select(func.count(RedditComment.id))
+    comment_result = await db.execute(comment_count_stmt)
+    total_comments = comment_result.scalar()
+
     # Total stocks
     stock_count_stmt = select(func.count(Stock.symbol))
     stock_result = await db.execute(stock_count_stmt)
     total_stocks = stock_result.scalar()
+
+    # Tracked subreddits count (active only)
+    tracked_subreddits_stmt = select(func.count(TrackedSubreddit.id)).where(
+        TrackedSubreddit.is_active == True
+    )
+    tracked_subreddits_result = await db.execute(tracked_subreddits_stmt)
+    tracked_subreddits_count = tracked_subreddits_result.scalar()
+
+    # Tracked posts (currently being tracked for comments)
+    now = datetime.utcnow()
+    tracked_posts_stmt = select(func.count(RedditPost.id)).where(
+        RedditPost.track_comments == True,
+        RedditPost.track_until > now
+    )
+    tracked_posts_result = await db.execute(tracked_posts_stmt)
+    tracked_posts = tracked_posts_result.scalar()
 
     # Posts by subreddit
     subreddit_stmt = (
@@ -148,16 +206,56 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
     # Recent activity (last 24 hours)
     yesterday = datetime.utcnow() - timedelta(days=1)
-    recent_stmt = select(func.count(RedditPost.id)).where(
+    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+
+    recent_posts_stmt = select(func.count(RedditPost.id)).where(
         RedditPost.created_at >= yesterday
     )
-    recent_result = await db.execute(recent_stmt)
-    recent_posts = recent_result.scalar()
+    recent_posts_result = await db.execute(recent_posts_stmt)
+    recent_posts = recent_posts_result.scalar()
+
+    # Recent comments (last 24 hours)
+    recent_comments_stmt = select(func.count(RedditComment.id)).where(
+        RedditComment.created_at >= yesterday
+    )
+    recent_comments_result = await db.execute(recent_comments_stmt)
+    recent_comments = recent_comments_result.scalar()
+
+    # Recent comments (last 1 hour)
+    recent_comments_1h_stmt = select(func.count(RedditComment.id)).where(
+        RedditComment.created_at >= one_hour_ago
+    )
+    recent_comments_1h_result = await db.execute(recent_comments_1h_stmt)
+    recent_comments_1h = recent_comments_1h_result.scalar()
+
+    # Comment growth (posts with new comments in last hour)
+    comment_growth_stmt = select(func.count(RedditPost.id)).where(
+        RedditPost.last_comment_scrape_at >= one_hour_ago,
+        RedditPost.num_comments > RedditPost.initial_num_comments
+    )
+    comment_growth_result = await db.execute(comment_growth_stmt)
+    posts_with_growth = comment_growth_result.scalar()
+
+    # Total new comments added (sum of comment growth)
+    growth_sum_stmt = select(
+        func.sum(RedditPost.num_comments - RedditPost.initial_num_comments)
+    ).where(
+        RedditPost.num_comments > RedditPost.initial_num_comments
+    )
+    growth_sum_result = await db.execute(growth_sum_stmt)
+    total_new_comments = growth_sum_result.scalar() or 0
 
     return {
         "total_posts": total_posts,
+        "total_comments": total_comments,
         "total_stocks": total_stocks,
+        "tracked_posts": tracked_posts,
+        "tracked_subreddits_count": tracked_subreddits_count,
         "recent_posts_24h": recent_posts,
+        "recent_comments_24h": recent_comments,
+        "recent_comments_1h": recent_comments_1h,
+        "posts_with_growth_1h": posts_with_growth,
+        "total_new_comments": total_new_comments,
         "posts_by_subreddit": [
             {"subreddit": row.subreddit, "count": row.count}
             for row in posts_by_subreddit
@@ -213,7 +311,7 @@ async def get_comments(
                 "author": row.RedditComment.author,
                 "content": row.RedditComment.content,
                 "score": row.RedditComment.score,
-                "mentioned_stocks": json.loads(row.RedditComment.mentioned_stocks) if row.RedditComment.mentioned_stocks else [],
+                "mentioned_stocks": parse_mentioned_stocks(row.RedditComment.mentioned_stocks),
                 "sentiment_label": row.RedditComment.sentiment_label,
                 "sentiment_score": row.RedditComment.sentiment_score,
                 "created_at": row.RedditComment.created_at.isoformat(),
@@ -229,36 +327,93 @@ async def get_comments(
 @router.get("/reddit-posts/{post_id}/comments")
 async def get_post_comments(
     post_id: str,
+    threaded: bool = Query(True, description="Return comments in threaded tree structure"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get comments for a specific Reddit post."""
-    stmt = (
-        select(RedditComment)
-        .where(RedditComment.post_id == post_id)
-        .order_by(desc(RedditComment.score))
-    )
-    result = await db.execute(stmt)
-    comments = result.scalars().all()
+    """Get comments for a specific Reddit post, optionally in threaded format."""
+    try:
+        stmt = (
+            select(RedditComment)
+            .where(RedditComment.post_id == post_id)
+            .order_by(desc(RedditComment.score))
+        )
+        result = await db.execute(stmt)
+        comments = result.scalars().all()
 
-    return [
-        {
-            "id": comment.id,
-            "post_id": comment.post_id,
-            "author": comment.author,
-            "content": comment.content,
-            "score": comment.score,
-            "mentioned_stocks": json.loads(comment.mentioned_stocks) if comment.mentioned_stocks else [],
-            "sentiment_label": comment.sentiment_label,
-            "sentiment_score": comment.sentiment_score,
-            "created_at": comment.created_at.isoformat(),
-        }
-        for comment in comments
-    ]
+        # Build comment dictionaries
+        comment_dicts = [
+            {
+                "id": comment.id,
+                "post_id": comment.post_id,
+                "author": comment.author,
+                "content": comment.content,
+                "score": comment.score,
+                "mentioned_stocks": parse_mentioned_stocks(comment.mentioned_stocks),
+                "sentiment_label": comment.sentiment_label,
+                "sentiment_score": comment.sentiment_score,
+                "created_at": comment.created_at.isoformat() if comment.created_at else None,
+                "parent_id": comment.parent_id,
+                "depth": comment.depth or 0,
+                "replies": []  # Will be populated for threaded view
+            }
+            for comment in comments
+        ]
+
+        if not threaded:
+            # Return flat list sorted by score
+            return comment_dicts
+
+        # Build threaded tree structure
+        comment_map = {c["id"]: c for c in comment_dicts}
+        root_comments = []
+
+        for comment in comment_dicts:
+            parent_id = comment["parent_id"]
+            if parent_id and parent_id in comment_map:
+                # This is a reply - add to parent's replies
+                comment_map[parent_id]["replies"].append(comment)
+            else:
+                # This is a top-level comment
+                root_comments.append(comment)
+
+        # Sort top-level comments by score (descending)
+        root_comments.sort(key=lambda c: c["score"], reverse=True)
+
+        # Recursively sort replies by score
+        def sort_replies(comment):
+            if comment["replies"]:
+                comment["replies"].sort(key=lambda c: c["score"], reverse=True)
+                for reply in comment["replies"]:
+                    sort_replies(reply)
+
+        for comment in root_comments:
+            sort_replies(comment)
+
+        return root_comments
+
+    except Exception as e:
+        import traceback
+        print(f"ERROR in get_post_comments: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/scraper-health")
 async def get_scraper_health(db: AsyncSession = Depends(get_db)):
     """Get scraper health and status information."""
+    # Import redis here
+    import redis as redis_lib
+    import json as json_lib
+
+    # Get current post being analyzed from Redis
+    try:
+        redis_client = redis_lib.from_url(os.getenv("REDIS_URL", "redis://redis:6379"), decode_responses=True)
+        current_post_data = redis_client.get("comment_scraper:current_post")
+        current_post = json_lib.loads(current_post_data) if current_post_data else None
+    except Exception as e:
+        print(f"Redis error: {e}")
+        current_post = None
+
     # Get last run - prioritize running, then pending, then most recent
     # First check for running
     running_stmt = (
@@ -293,6 +448,15 @@ async def get_scraper_health(db: AsyncSession = Depends(get_db)):
         )
         last_run_result = await db.execute(last_run_stmt)
         last_run = last_run_result.scalar_one_or_none()
+
+    # Get all running jobs (not just reddit)
+    running_jobs_stmt = (
+        select(ScraperRun)
+        .where(ScraperRun.status == "running")
+        .order_by(desc(ScraperRun.started_at))
+    )
+    running_jobs_result = await db.execute(running_jobs_stmt)
+    running_jobs = running_jobs_result.scalars().all()
 
     # Get recent runs (last 10)
     recent_runs_stmt = (
@@ -352,10 +516,22 @@ async def get_scraper_health(db: AsyncSession = Depends(get_db)):
             ),
             "duration_seconds": last_run.duration_seconds if last_run else None,
             "posts_collected": last_run.posts_collected if last_run else 0,
+            "comments_collected": last_run.comments_collected if last_run else 0,
             "errors_count": last_run.errors_count if last_run else 0,
             "status": last_run.status if last_run else None,
         },
         "next_run": next_run.isoformat(),
+        "running_jobs": [
+            {
+                "id": job.id,
+                "run_type": job.run_type,
+                "started_at": job.started_at.isoformat(),
+                "posts_collected": job.posts_collected,
+                "comments_collected": job.comments_collected,
+            }
+            for job in running_jobs
+        ],
+        "current_post": current_post,  # Currently analyzing post (from comment scraper)
         "stats": {
             "avg_duration_seconds": round(avg_duration, 2),
             "success_rate": round(success_rate, 1),
@@ -367,6 +543,7 @@ async def get_scraper_health(db: AsyncSession = Depends(get_db)):
                 "status": run.status,
                 "duration_seconds": run.duration_seconds,
                 "posts_collected": run.posts_collected,
+                "comments_collected": run.comments_collected,
             }
             for run in recent_runs[:5]
         ],

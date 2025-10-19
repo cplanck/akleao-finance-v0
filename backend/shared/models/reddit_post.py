@@ -1,6 +1,6 @@
 """Reddit post and comment models."""
 
-from sqlalchemy import Column, String, Integer, Float, Text, ForeignKey, Boolean
+from sqlalchemy import Column, String, Integer, Float, Text, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from .base import Base, TimestampMixin
 
@@ -33,6 +33,16 @@ class RedditPost(Base, TimestampMixin):
     is_processed = Column(Boolean, default=False)
     is_relevant = Column(Boolean, default=True)
 
+    # Timestamps
+    posted_at = Column(DateTime, nullable=False)  # When the post was created on Reddit
+
+    # Comment tracking fields
+    track_comments = Column(Boolean, default=False)  # Whether to actively track this post for new comments
+    track_until = Column(DateTime, nullable=True)  # Stop tracking after this date
+    last_comment_scrape_at = Column(DateTime, nullable=True)  # Last time we scraped comments
+    comment_scrape_count = Column(Integer, default=0)  # Number of times we've scraped comments
+    initial_num_comments = Column(Integer, default=0)  # Comment count when post was first scraped
+
     # Relationships
     comments = relationship("RedditComment", back_populates="post")
 
@@ -59,6 +69,10 @@ class RedditComment(Base, TimestampMixin):
     # Processing flags
     is_processed = Column(Boolean, default=False)
     is_relevant = Column(Boolean, default=True)
+
+    # Threading/nesting
+    parent_id = Column(String(20), nullable=True)  # ID of parent comment (None for top-level)
+    depth = Column(Integer, default=0)  # Nesting depth (0 for top-level)
 
     # Relationships
     post = relationship("RedditPost", back_populates="comments")
