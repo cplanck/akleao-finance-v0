@@ -106,13 +106,13 @@ export default function StockChart({
       {/* Ambient gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
 
-      <CardHeader className="pb-4 relative z-10">
+      <CardHeader className="pb-2 relative z-10">
         {/* Stock Info Row */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div className="space-y-1">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div className="space-y-0.5 min-h-[60px]">
             <CardTitle className="text-2xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">
               {overviewLoading ? (
-                <span className="inline-block animate-pulse">Loading...</span>
+                <span className="inline-block h-8 w-32 bg-muted animate-pulse rounded"></span>
               ) : (
                 overview?.name || symbol
               )}
@@ -120,7 +120,9 @@ export default function StockChart({
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span className="font-medium">{symbol}</span>
               <PinButton symbol={symbol} />
-              {overview && (
+              {overviewLoading ? (
+                <span className="inline-block h-5 w-20 bg-muted animate-pulse rounded-full"></span>
+              ) : overview && (
                 <>
                   <span className="opacity-50">•</span>
                   <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
@@ -130,10 +132,10 @@ export default function StockChart({
               )}
             </div>
           </div>
-          <div className="text-left sm:text-right group">
+          <div className="text-left sm:text-right group min-h-[60px] flex flex-col justify-center">
             <div className="text-3xl font-bold transition-transform duration-300 group-hover:scale-105">
               {quoteLoading ? (
-                <span className="inline-block animate-pulse">...</span>
+                <span className="inline-block h-9 w-28 bg-muted animate-pulse rounded"></span>
               ) : (
                 `$${quote?.price.toFixed(2)}`
               )}
@@ -145,15 +147,21 @@ export default function StockChart({
                   : "text-red-500 group-hover:text-red-400"
               }`}
             >
-              <span className="text-lg">{(quote?.change || 0) >= 0 ? "↗" : "↘"}</span>
-              <span className="px-2 py-0.5 rounded-full bg-current/10">
-                {quote?.change.toFixed(2)} ({quote?.changePercent.toFixed(2)}%)
-              </span>
+              {quoteLoading ? (
+                <span className="inline-block h-6 w-24 bg-muted animate-pulse rounded-full"></span>
+              ) : (
+                <>
+                  <span className="text-lg">{(quote?.change || 0) >= 0 ? "↗" : "↘"}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-current/10">
+                    {quote?.change.toFixed(2)} ({quote?.changePercent.toFixed(2)}%)
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pb-4 relative z-10">
+      <CardContent className="pb-3 relative z-10">
         {isLoading ? (
           <div className="h-[300px] sm:h-[400px] md:h-[500px] flex items-center justify-center">
             <div className="flex flex-col items-center gap-3">
@@ -236,9 +244,9 @@ export default function StockChart({
         )}
 
         {/* Time Range Tabs - Bottom */}
-        <div className="flex justify-center mt-4">
+        <div className="flex justify-center mt-3">
           <Tabs value={timeRange} onValueChange={setTimeRange}>
-            <TabsList className="grid grid-cols-5 bg-muted/50 backdrop-blur-sm p-1 rounded-xl border border-primary/5">
+            <TabsList className="grid grid-cols-5 bg-muted/50 backdrop-blur-sm p-0.5 rounded-xl border border-primary/5">
               <TabsTrigger
                 value="1D"
                 className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"

@@ -5,9 +5,11 @@ import time
 import json
 import re
 from datetime import datetime
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from openai import OpenAI
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
 import sys
 sys.path.insert(0, "../../shared")
 from shared.models.research import ResearchReport
@@ -16,28 +18,62 @@ from research_prompt import RESEARCH_SYSTEM_PROMPT, get_research_prompt
 
 # Configuration
 DATABASE_URL = os.getenv("DATABASE_URL")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
 
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
+
+def decrypt_api_key(encrypted_text: str) -> str:
+    """Decrypt the user's API key using AES-256-CBC."""
+    if not ENCRYPTION_KEY:
+        raise ValueError("ENCRYPTION_KEY not set in environment")
+
+    # Parse the encrypted format: "iv:encrypted_data"
+    parts = encrypted_text.split(":")
+    if len(parts) != 2:
+        raise ValueError("Invalid encrypted key format")
+
+    iv = bytes.fromhex(parts[0])
+    encrypted_data = bytes.fromhex(parts[1])
+
+    # Get the encryption key (first 32 bytes of the hex string)
+    key = bytes.fromhex(ENCRYPTION_KEY[:64])
+
+    # Decrypt
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    decrypted = unpad(cipher.decrypt(encrypted_data), AES.block_size)
+
+    return decrypted.decode("utf-8")
+
+
+def get_user_api_key(db: Session, user_id: str) -> str:
+    """Fetch and decrypt the user's OpenAI API key from the database."""
+    result = db.execute(
+        text("SELECT encrypted_key FROM user_api_keys WHERE user_id = :user_id"),
+        {"user_id": user_id}
+    ).fetchone()
+
+    if not result:
+        raise ValueError(f"No API key found for user {user_id}")
+
+    encrypted_key = result[0]
+    return decrypt_api_key(encrypted_key)
 
 # Section markers for parsing
 SECTION_MARKERS = {
-    "overview": "## 1. Company Overview",
-    "financials": "## 2. Financial Analysis",
-    "sentiment": "## 3. Market Sentiment & Positioning",
-    "risks": "## 4. Risks & Challenges",
-    "opportunities": "## 5. Opportunities & Catalysts",
-    "recommendation": "## 6. Investment Recommendation",
-    "references": "## 7. References"
+    "overview": "## 1. World Context",  # Changed to World Context
+    "financials": "## 2. The Macro Thesis",  # Repurposed for Macro Thesis
+    "sentiment": "## 6. Research Process",  # Repurposed for Research Process
+    "risks": "## 4. What Could Go Wrong",
+    "opportunities": "## 3. Catalysts & Opportunities",
+    "recommendation": "## 5. The Verdict",
+    "references": "## 7. Sources"
 }
 
 
 def extract_section(full_text: str, section_name: str) -> str:
     """Extract a specific section from the full report."""
     marker = SECTION_MARKERS.get(section_name)
-    if not marker:
+    if not marker or not marker:  # Skip empty markers
         return ""
 
     # Find the section start
@@ -45,18 +81,17 @@ def extract_section(full_text: str, section_name: str) -> str:
     if start_idx == -1:
         return ""
 
-    # Find the next section or end of text
-    section_keys = list(SECTION_MARKERS.keys())
-    current_idx = section_keys.index(section_name)
+    # Find the next section header (any ## followed by number)
+    # This will match the next numbered section header
+    import re
+    # Look for the next section header after this one
+    next_section_pattern = r'\n## \d+\.'
+    match = re.search(next_section_pattern, full_text[start_idx + len(marker):])
 
-    # Look for next section
-    end_idx = len(full_text)
-    for next_section in section_keys[current_idx + 1:]:
-        next_marker = SECTION_MARKERS[next_section]
-        next_idx = full_text.find(next_marker, start_idx + len(marker))
-        if next_idx != -1:
-            end_idx = next_idx
-            break
+    if match:
+        end_idx = start_idx + len(marker) + match.start()
+    else:
+        end_idx = len(full_text)
 
     return full_text[start_idx:end_idx].strip()
 
@@ -117,6 +152,16 @@ def generate_research_report(report: ResearchReport, db: Session):
             "percentage": 0
         })
 
+        # Fetch the user's API key
+        try:
+            user_api_key = get_user_api_key(db, report.user_id)
+            print(f"Using user's API key for report {report.id}")
+        except ValueError as e:
+            raise ValueError(f"Cannot generate report: {str(e)}")
+
+        # Create OpenAI client with user's API key
+        client = OpenAI(api_key=user_api_key)
+
         # Generate the report using OpenAI with streaming
         print(f"Generating research report for {report.stock_symbol}...")
 
@@ -125,41 +170,93 @@ def generate_research_report(report: ResearchReport, db: Session):
             {"role": "user", "content": get_research_prompt(report.stock_symbol)}
         ]
 
-        # Call OpenAI with streaming
+        # Call OpenAI with web search capabilities
         full_report = ""
         last_percentage = 0
 
-        # Using GPT-4 Turbo with browsing/web search capabilities
-        # Note: OpenAI's web browsing is available in ChatGPT but not directly in API
-        # We'll use function calling with a web search tool instead
-        response = client.chat.completions.create(
-            model="gpt-4-turbo-preview",  # or "gpt-4" depending on your access
-            messages=messages,
-            stream=True,
-            temperature=0.7,
-            max_tokens=4000
-        )
+        # Using OpenAI's experimental web search API
+        # This uses the newer responses.create API with web_search tool
+        try:
+            response = client.responses.create(
+                model="gpt-4o",
+                tools=[{"type": "web_search"}],
+                input=messages,
+                stream=True,
+                # Optional: Configure web search parameters
+                extra_body={
+                    "web": {
+                        "recency_days": 180,  # Focus on last 6 months
+                        "max_results": 50,
+                        "domain_filter": [
+                            "sec.gov",
+                            "reuters.com",
+                            "seekingalpha.com",
+                            "barrons.com",
+                            "marketwatch.com",
+                            "cnbc.com",
+                            "investorplace.com",
+                            "fool.com",
+                            "bloomberg.com",
+                            "wsj.com",
+                            "finance.yahoo.com",
+                            "morningstar.com",
+                            "investors.com"
+                        ]
+                    }
+                }
+            )
 
-        for chunk in response:
-            if chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
-                full_report += content
+            for chunk in response:
+                # Handle different chunk types from responses API
+                if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'content'):
+                    content = chunk.delta.content
+                    if content:
+                        full_report += content
 
-                # Estimate progress based on content length (rough approximation)
-                # Assume a full report is ~3000-4000 tokens
-                estimated_percentage = min(int((len(full_report) / 3500) * 90), 90)
+                        # Estimate progress based on content length
+                        estimated_percentage = min(int((len(full_report) / 3500) * 90), 90)
 
-                if estimated_percentage > last_percentage:
-                    last_percentage = estimated_percentage
-                    report.progress_percentage = estimated_percentage
-                    db.commit()
+                        if estimated_percentage > last_percentage:
+                            last_percentage = estimated_percentage
+                            report.progress_percentage = estimated_percentage
+                            db.commit()
 
-                    publish_research_update(report.id, {
-                        "type": "progress",
-                        "message": "Generating report...",
-                        "percentage": estimated_percentage,
-                        "content_preview": full_report[:500]  # Send preview
-                    })
+                            publish_research_update(report.id, {
+                                "type": "progress",
+                                "message": "Generating report...",
+                                "percentage": estimated_percentage,
+                                "content_preview": full_report[:500]
+                            })
+
+        except (AttributeError, TypeError, Exception) as e:
+            # Fallback to standard chat completion if responses API not available
+            print(f"Web search API not available ({type(e).__name__}: {str(e)}), falling back to standard completion")
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                stream=True,
+                temperature=0.7,
+                max_tokens=4000
+            )
+
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_report += content
+
+                    estimated_percentage = min(int((len(full_report) / 3500) * 90), 90)
+
+                    if estimated_percentage > last_percentage:
+                        last_percentage = estimated_percentage
+                        report.progress_percentage = estimated_percentage
+                        db.commit()
+
+                        publish_research_update(report.id, {
+                            "type": "progress",
+                            "message": "Generating report...",
+                            "percentage": estimated_percentage,
+                            "content_preview": full_report[:500]
+                        })
 
         # Parse the full report into sections
         print("Parsing report sections...")
@@ -263,8 +360,8 @@ def main():
     print("Deep Research Worker starting...")
     print(f"Polling interval: {POLL_INTERVAL_SECONDS}s")
 
-    if not OPENAI_API_KEY:
-        print("ERROR: OPENAI_API_KEY not set!")
+    if not ENCRYPTION_KEY:
+        print("ERROR: ENCRYPTION_KEY not set!")
         return
 
     engine = create_engine(DATABASE_URL, pool_pre_ping=True)

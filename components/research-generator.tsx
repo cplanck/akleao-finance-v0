@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { FileText, Loader2, CheckCircle2, AlertCircle, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ResearchReportViewer } from "@/components/research-report-viewer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -29,6 +30,40 @@ export function ResearchGenerator({ symbol, onReportComplete }: ResearchGenerato
   const [status, setStatus] = useState("");
   const [reportId, setReportId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showReport, setShowReport] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(true);
+  const [existingReports, setExistingReports] = useState<any[]>([]);
+
+  // Fetch existing reports when symbol changes
+  useEffect(() => {
+    const fetchExistingReports = async () => {
+      try {
+        setLoadingExisting(true);
+        const response = await fetch(`${API_URL}/api/research/list/${symbol}`);
+
+        if (response.ok) {
+          const data = await response.json();
+          setExistingReports(data.reports || []);
+
+          // Auto-select the most recent completed report
+          const completedReport = data.reports?.find((r: any) => r.status === "completed");
+          if (completedReport) {
+            setReportId(completedReport.id);
+            setShowReport(true);
+          } else {
+            setReportId(null);
+            setShowReport(false);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching existing reports:", err);
+      } finally {
+        setLoadingExisting(false);
+      }
+    };
+
+    fetchExistingReports();
+  }, [symbol]);
 
   const generateReport = async () => {
     try {
@@ -37,8 +72,8 @@ export function ResearchGenerator({ symbol, onReportComplete }: ResearchGenerato
       setStatus("Initializing research...");
       setError(null);
 
-      // Call API to generate report
-      const response = await fetch(`${API_URL}/api/research/generate`, {
+      // Call API to generate report (via Next.js API route for auth)
+      const response = await fetch(`/api/research/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -104,21 +139,31 @@ export function ResearchGenerator({ symbol, onReportComplete }: ResearchGenerato
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Deep Research Report
-        </CardTitle>
-        <CardDescription>
-          Generate a comprehensive AI-powered research report with financial analysis, market sentiment, risks, and opportunities
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!isGenerating && !reportId && (
+    <>
+    <div className="space-y-4">
+        {loadingExisting && (
+          <div className="flex items-center justify-center py-4 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            <span className="text-xs">Checking for existing reports...</span>
+          </div>
+        )}
+
+        {!loadingExisting && !isGenerating && !reportId && (
           <Button onClick={generateReport} className="w-full" size="lg">
             <FileText className="mr-2 h-4 w-4" />
             Generate Research Report for {symbol}
+          </Button>
+        )}
+
+        {!loadingExisting && !isGenerating && reportId && (
+          <Button
+            onClick={generateReport}
+            variant="outline"
+            className="w-full"
+            size="sm"
+          >
+            <FileText className="mr-2 h-3 w-3" />
+            Generate New Report
           </Button>
         )}
 
@@ -146,18 +191,27 @@ export function ResearchGenerator({ symbol, onReportComplete }: ResearchGenerato
           </div>
         )}
 
-        {!isGenerating && reportId && !error && (
-          <div className="flex items-start gap-2 rounded-lg border border-primary/50 bg-primary/10 p-3">
-            <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        {!loadingExisting && !isGenerating && reportId && !error && existingReports.length > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-primary/50 bg-primary/10 p-2">
+            <CheckCircle2 className="h-3 w-3 text-primary shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm font-medium">Report Complete!</p>
-              <p className="text-xs text-muted-foreground">
-                Your research report for {symbol} is ready to view.
+              <p className="text-xs font-medium">
+                {existingReports.length} report{existingReports.length > 1 ? 's' : ''} available
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Showing most recent report for {symbol}
               </p>
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Report Viewer */}
+      {showReport && reportId && (
+        <div className="mt-6">
+          <ResearchReportViewer reportId={reportId} />
+        </div>
+      )}
+    </>
   );
 }

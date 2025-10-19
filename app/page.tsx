@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -12,8 +13,7 @@ import KeyMetrics from "@/components/key-metrics";
 import FundamentalsSummary from "@/components/fundamentals-summary";
 import { MarketStatus } from "@/components/market-status";
 import { CommandMenu } from "@/components/command-menu";
-import { RedditSentiment } from "@/components/reddit-sentiment";
-import { ResearchGenerator } from "@/components/research-generator";
+import { RedditAndResearch } from "@/components/reddit-and-research";
 import { fetchStockQuote, fetchStockOverview } from "@/lib/stock-api";
 
 function getTimeAgo(date: Date): string {
@@ -29,11 +29,29 @@ function getTimeAgo(date: Date): string {
 }
 
 export default function Home() {
-  const [selectedStock, setSelectedStock] = useState("AAPL");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Get stock from URL, default to AAPL
+  const stockFromUrl = searchParams.get("symbol") || "AAPL";
+  const [selectedStock, setSelectedStock] = useState(stockFromUrl);
   const [dataFetchedAt, setDataFetchedAt] = useState<Date>(new Date());
   const [timeAgo, setTimeAgo] = useState<string>("just now");
   const [showFundamentals, setShowFundamentals] = useState(false);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+
+  // Sync URL with selected stock
+  useEffect(() => {
+    if (stockFromUrl !== selectedStock) {
+      setSelectedStock(stockFromUrl);
+    }
+  }, [stockFromUrl]);
+
+  // Update URL when stock changes
+  const handleSelectStock = (symbol: string) => {
+    setSelectedStock(symbol);
+    router.push(`/?symbol=${symbol}`, { scroll: false });
+  };
 
   const { data: quote, isLoading: quoteLoading, dataUpdatedAt: quoteUpdatedAt } = useQuery({
     queryKey: ["quote", selectedStock],
@@ -66,62 +84,60 @@ export default function Home() {
       <CommandMenu
         open={commandMenuOpen}
         onOpenChange={setCommandMenuOpen}
-        onSelectStock={setSelectedStock}
+        onSelectStock={handleSelectStock}
       />
       <AppSidebar
         variant="inset"
         selectedStock={selectedStock}
-        onSelectStock={setSelectedStock}
+        onSelectStock={handleSelectStock}
       />
       <SidebarInset>
         <SiteHeader />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+            <div className="flex flex-col gap-3 py-3 md:gap-4 md:py-4">
               {/* Main Content */}
-              <div className="px-4 lg:px-6 space-y-6">
+              <div className="px-3 lg:px-4 space-y-4">
         {/* Market Status & Stock Selector */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <MarketStatus />
           <StockSelector
             selectedStock={selectedStock}
-            onSelectStock={setSelectedStock}
+            onSelectStock={handleSelectStock}
           />
         </div>
 
         {/* AI Fundamentals Summary */}
         <FundamentalsSummary symbol={selectedStock} />
 
-        {/* Chart and Reddit Discussions - 50/50 Split */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+        {/* Chart and Reddit/Research - 50/50 Split */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
           {/* Chart */}
-          <div className="relative">
-            <StockChart
-              symbol={selectedStock}
-              quote={quote}
-              overview={overview}
-              quoteLoading={quoteLoading}
-              overviewLoading={overviewLoading}
-            />
-          </div>
+          <StockChart
+            symbol={selectedStock}
+            quote={quote}
+            overview={overview}
+            quoteLoading={quoteLoading}
+            overviewLoading={overviewLoading}
+          />
 
-          {/* Reddit Discussions */}
-          <RedditSentiment symbol={selectedStock} limit={5} />
+          {/* Reddit Discussions & AI Research */}
+          <RedditAndResearch symbol={selectedStock} />
         </div>
 
         {/* Fundamentals Section */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           <button
             onClick={() => setShowFundamentals(!showFundamentals)}
-            className="group flex items-center justify-between w-full p-5 text-left bg-gradient-to-br from-card/95 via-card/90 to-card/95 backdrop-blur-xl border border-primary/10 rounded-xl hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 transition-all duration-300 relative overflow-hidden"
+            className="group flex items-center justify-between w-full p-3 text-left bg-gradient-to-br from-card/95 via-card/90 to-card/95 backdrop-blur-xl border border-primary/10 rounded-xl hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 transition-all duration-300 relative overflow-hidden"
           >
             {/* Ambient gradient overlay */}
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-            <div className="flex items-center gap-3 relative z-10">
-              <div className={`h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center transition-all duration-300 ${showFundamentals ? 'rotate-180 scale-110' : 'group-hover:scale-110'}`}>
+            <div className="flex items-center gap-2.5 relative z-10">
+              <div className={`h-8 w-8 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center transition-all duration-300 ${showFundamentals ? 'rotate-180 scale-110' : 'group-hover:scale-110'}`}>
                 <svg
-                  className="h-5 w-5 text-primary transition-transform duration-300"
+                  className="h-4 w-4 text-primary transition-transform duration-300"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -130,12 +146,12 @@ export default function Home() {
                 </svg>
               </div>
               <div>
-                <span className="text-lg font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">Key Metrics & Fundamentals</span>
+                <span className="text-base font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">Key Metrics & Fundamentals</span>
                 <p className="text-xs text-muted-foreground font-medium mt-0.5">Detailed financial analysis and ratios</p>
               </div>
             </div>
             <svg
-              className={`h-5 w-5 transition-all duration-300 relative z-10 text-primary ${showFundamentals ? 'rotate-180 scale-110' : 'group-hover:scale-110'}`}
+              className={`h-4 w-4 transition-all duration-300 relative z-10 text-primary ${showFundamentals ? 'rotate-180 scale-110' : 'group-hover:scale-110'}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -150,9 +166,6 @@ export default function Home() {
             </div>
           )}
         </div>
-
-        {/* Research Report Generator */}
-        <ResearchGenerator symbol={selectedStock} />
 
         {/* Company Info */}
         {overview && (

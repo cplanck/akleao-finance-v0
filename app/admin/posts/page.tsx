@@ -247,9 +247,15 @@ function PostsPageContent() {
                 ))
               ) : data && data.posts.length > 0 ? (
                 data.posts.map((post) => {
-                  const stocks = post.mentioned_stocks
-                    ? JSON.parse(post.mentioned_stocks)
-                    : [];
+                  let stocks = [];
+                  try {
+                    stocks = post.mentioned_stocks && post.mentioned_stocks.trim()
+                      ? JSON.parse(post.mentioned_stocks)
+                      : [];
+                  } catch (e) {
+                    console.error("Failed to parse mentioned_stocks for post:", post.id, e);
+                    stocks = [];
+                  }
                   const isExpanded = expandedPosts.has(post.id);
                   const comments = commentsCache[post.id] || [];
                   const isLoadingComments = loadingComments.has(post.id);
@@ -394,24 +400,36 @@ function PostsPageContent() {
                                           {comment.content}
                                         </ReactMarkdown>
                                       </div>
-                                      {comment.mentioned_stocks && (
-                                        <div className="flex items-center gap-2 mt-2">
-                                          <span className="text-xs text-muted-foreground">
-                                            Stocks:
-                                          </span>
-                                          {JSON.parse(comment.mentioned_stocks).map(
-                                            (stock: string) => (
-                                              <Badge
-                                                key={stock}
-                                                variant="secondary"
-                                                className="text-xs font-mono"
-                                              >
-                                                ${stock}
-                                              </Badge>
-                                            )
-                                          )}
-                                        </div>
-                                      )}
+                                      {comment.mentioned_stocks && (() => {
+                                        try {
+                                          const commentStocks = comment.mentioned_stocks.trim()
+                                            ? JSON.parse(comment.mentioned_stocks)
+                                            : [];
+                                          if (commentStocks.length > 0) {
+                                            return (
+                                              <div className="flex items-center gap-2 mt-2">
+                                                <span className="text-xs text-muted-foreground">
+                                                  Stocks:
+                                                </span>
+                                                {commentStocks.map(
+                                                  (stock: string) => (
+                                                    <Badge
+                                                      key={stock}
+                                                      variant="secondary"
+                                                      className="text-xs font-mono"
+                                                    >
+                                                      ${stock}
+                                                    </Badge>
+                                                  )
+                                                )}
+                                              </div>
+                                            );
+                                          }
+                                        } catch (e) {
+                                          console.error("Failed to parse comment mentioned_stocks:", comment.id, e);
+                                        }
+                                        return null;
+                                      })()}
                                     </div>
                                   ))}
                                 </div>

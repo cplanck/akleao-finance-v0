@@ -89,7 +89,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
       - REDIS_URL=redis://redis:6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - POLL_INTERVAL_SECONDS=${RESEARCH_POLL_INTERVAL_SECONDS:-10}
     depends_on:
       postgres:

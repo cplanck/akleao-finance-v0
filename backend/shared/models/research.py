@@ -11,6 +11,7 @@ class ResearchReport(Base, TimestampMixin):
     __tablename__ = "research_reports"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Text, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     stock_symbol = Column(String(10), ForeignKey("stocks.symbol"), nullable=False, index=True)
     report_type = Column(String(50), nullable=False, default="deep_dive")  # earnings, analysis, deep_dive, etc.
 

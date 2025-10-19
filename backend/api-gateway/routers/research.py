@@ -23,6 +23,7 @@ class GenerateReportRequest(BaseModel):
     """Request to generate a research report."""
     stock_symbol: str
     report_type: str = "deep_dive"
+    user_id: str  # Provided by Next.js API route after session validation
 
 
 class ReportResponse(BaseModel):
@@ -67,6 +68,8 @@ async def generate_report(
     """
     Queue a new research report generation.
     The worker will pick it up and start processing.
+
+    Note: user_id is provided by the Next.js API route after session validation.
     """
     # Check if stock exists, if not create a placeholder
     stmt = select(Stock).where(Stock.symbol == request.stock_symbol.upper())
@@ -84,10 +87,11 @@ async def generate_report(
         db.add(stock)
         await db.flush()
 
-    # Check if there's already a recent pending/generating report
+    # Check if there's already a recent pending/generating report for this user
     recent_stmt = (
         select(ResearchReport)
         .where(ResearchReport.stock_symbol == request.stock_symbol.upper())
+        .where(ResearchReport.user_id == request.user_id)
         .where(ResearchReport.status.in_(["pending", "generating"]))
         .order_by(desc(ResearchReport.created_at))
         .limit(1)
@@ -103,6 +107,7 @@ async def generate_report(
 
     # Create new research report
     report = ResearchReport(
+        user_id=request.user_id,
         stock_symbol=request.stock_symbol.upper(),
         report_type=request.report_type,
         title=f"Deep Research Report: {request.stock_symbol.upper()}",
