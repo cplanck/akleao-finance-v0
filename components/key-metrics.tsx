@@ -93,8 +93,8 @@ export default function KeyMetrics({ symbol }: KeyMetricsProps) {
 
   return (
     <div>
-      <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">What You Need to Know</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <h2 className="text-base sm:text-lg font-semibold mb-2 sm:mb-2.5">What You Need to Know</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         {metrics.map((metric) => (
           <MetricCardWithAI
             key={metric.label}

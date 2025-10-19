@@ -90,7 +90,7 @@ export function ResearchReportViewer({ reportId }: ResearchReportViewerProps) {
   };
 
   return (
-    <div className="max-h-[600px] overflow-y-auto font-mono text-xs space-y-4 pr-2">
+    <div className="h-full overflow-y-auto font-mono text-xs space-y-4 pr-2">
       {/* Header */}
       <div className="flex items-start justify-between gap-2 pb-3 border-b border-border/50">
         <div className="space-y-1">

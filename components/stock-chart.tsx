@@ -102,22 +102,22 @@ export default function StockChart({
   };
 
   return (
-    <Card className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-br from-card/95 via-card/90 to-card/95 border-primary/10 shadow-2xl hover:shadow-primary/5 transition-all duration-500">
+    <Card className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-br from-card/95 via-card/90 to-card/95 border-primary/10 shadow-2xl hover:shadow-primary/5 transition-all duration-500 h-full flex flex-col">
       {/* Ambient gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
 
-      <CardHeader className="pb-2 relative z-10">
+      <CardHeader className="pb-2 px-3 pt-3 relative z-10 min-h-[88px]">
         {/* Stock Info Row */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-          <div className="space-y-0.5 min-h-[60px]">
-            <CardTitle className="text-2xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 h-full">
+          <div className="space-y-0.5 h-[52px] flex flex-col justify-center">
+            <CardTitle className="text-xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text h-7">
               {overviewLoading ? (
-                <span className="inline-block h-8 w-32 bg-muted animate-pulse rounded"></span>
+                <span className="inline-block h-7 w-32 bg-muted animate-pulse rounded"></span>
               ) : (
                 overview?.name || symbol
               )}
             </CardTitle>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground h-5">
               <span className="font-medium">{symbol}</span>
               <PinButton symbol={symbol} />
               {overviewLoading ? (
@@ -132,16 +132,16 @@ export default function StockChart({
               )}
             </div>
           </div>
-          <div className="text-left sm:text-right group min-h-[60px] flex flex-col justify-center">
-            <div className="text-3xl font-bold transition-transform duration-300 group-hover:scale-105">
+          <div className="text-left sm:text-right group h-[52px] flex flex-col justify-center">
+            <div className="text-2xl font-bold font-mono transition-transform duration-300 group-hover:scale-105 h-7 tabular-nums">
               {quoteLoading ? (
-                <span className="inline-block h-9 w-28 bg-muted animate-pulse rounded"></span>
+                <span className="inline-block h-7 w-28 bg-muted animate-pulse rounded"></span>
               ) : (
                 `$${quote?.price.toFixed(2)}`
               )}
             </div>
             <div
-              className={`text-sm flex items-center sm:justify-end gap-1 font-semibold transition-all duration-300 ${
+              className={`text-sm flex items-center sm:justify-end gap-1 font-semibold font-mono transition-all duration-300 h-6 tabular-nums ${
                 (quote?.change || 0) >= 0
                   ? "text-green-500 group-hover:text-green-400"
                   : "text-red-500 group-hover:text-red-400"
@@ -161,17 +161,18 @@ export default function StockChart({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pb-3 relative z-10">
-        {isLoading ? (
-          <div className="h-[300px] sm:h-[400px] md:h-[500px] flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-              <span className="text-sm text-muted-foreground font-medium">Loading chart data...</span>
+      <CardContent className="pb-3 px-3 relative z-10 flex-1 flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 mb-2">
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                <span className="text-sm text-muted-foreground font-medium">Loading chart data...</span>
+              </div>
             </div>
-          </div>
-        ) : (
-          <ChartContainer config={chartConfig} className="h-[300px] sm:h-[400px] md:h-[500px] w-full">
-            <AreaChart data={data || []} margin={{ left: 0, right: 0, top: 5, bottom: 5 }}>
+          ) : (
+            <ChartContainer config={chartConfig} className="h-full w-full">
+            <AreaChart data={data || []} margin={{ left: 0, right: 0, top: 5, bottom: 0 }}>
             <defs>
               <linearGradient id="fillPrice" x1="0" y1="0" x2="0" y2="1">
                 <stop
@@ -209,14 +210,14 @@ export default function StockChart({
                 // For 3M and 1Y: value is "Oct 10", show as is
                 return value;
               }}
-              className="text-xs text-muted-foreground"
+              className="text-xs text-muted-foreground font-mono"
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={8}
               tickFormatter={(value) => `$${value.toFixed(0)}`}
-              className="text-xs"
+              className="text-xs font-mono"
               domain={getDomain()}
               hide
             />
@@ -241,10 +242,11 @@ export default function StockChart({
             />
           </AreaChart>
         </ChartContainer>
-        )}
+          )}
+        </div>
 
         {/* Time Range Tabs - Bottom */}
-        <div className="flex justify-center mt-3">
+        <div className="flex justify-center mt-2">
           <Tabs value={timeRange} onValueChange={setTimeRange}>
             <TabsList className="grid grid-cols-5 bg-muted/50 backdrop-blur-sm p-0.5 rounded-xl border border-primary/5">
               <TabsTrigger

@@ -47,6 +47,11 @@ services:
       - ENV=development
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production-12345678}
       - CORS_ORIGINS=["http://localhost:3000"]
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
+      - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-AkleaoFinance/1.0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,18 +62,15 @@ services:
       - ./shared:/app/shared
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-  # Reddit Scraper Worker (Phase 1)
-  reddit-scraper:
+  # Reddit Scraper Scheduler - Creates jobs every 15 minutes
+  reddit-scheduler:
     build:
       context: ./workers/reddit-scraper
       dockerfile: Dockerfile
-    container_name: akleao-reddit-scraper
+    container_name: akleao-reddit-scheduler
     environment:
       - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
       - REDIS_URL=redis://redis:6379
-      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
-      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
-      - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-AkleaoFinance/1.0}
       - SCRAPE_INTERVAL_MINUTES=${SCRAPE_INTERVAL_MINUTES:-15}
     depends_on:
       postgres:
@@ -78,19 +80,44 @@ services:
     volumes:
       - ./workers/reddit-scraper:/app
       - ./shared:/app/shared
+    command: python scheduler.py
     restart: unless-stopped
 
-  # Deep Research Worker
+  # Reddit Scraper Worker - Processes jobs from the queue
+  reddit-scraper:
+    build:
+      context: ./workers/reddit-scraper
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - REDIS_URL=redis://redis:6379
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
+      - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-AkleaoFinance/1.0}
+      - POLL_INTERVAL_SECONDS=${SCRAPER_POLL_INTERVAL_SECONDS:-5}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers/reddit-scraper:/app
+      - ./shared:/app/shared
+    command: python -u main_job_based.py
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # Run 2 concurrent workers for faster processing
+
+  # Deep Research Worker - Multiple instances for concurrent processing
   deep-research:
     build:
       context: ./workers/deep-research
       dockerfile: Dockerfile
-    container_name: akleao-deep-research
     environment:
       - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
       - REDIS_URL=redis://redis:6379
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - POLL_INTERVAL_SECONDS=${RESEARCH_POLL_INTERVAL_SECONDS:-10}
+      - POLL_INTERVAL_SECONDS=${RESEARCH_POLL_INTERVAL_SECONDS:-5}
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,6 +127,8 @@ services:
       - ./workers/deep-research:/app
       - ./shared:/app/shared
     restart: unless-stopped
+    deploy:
+      replicas: 3  # Run 3 concurrent workers
 
   # Future workers (Phase 2+) - commented out for now
   # Uncomment these as you build them

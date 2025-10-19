@@ -140,12 +140,12 @@ export default function FundamentalsSummary({ symbol }: FundamentalsSummaryProps
 
   return (
     <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-muted">
-      <CardContent className="pt-6">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-full bg-primary/10 shrink-0">
-            <Sparkles className="h-4 w-4 text-primary" />
+      <CardContent className="pt-4">
+        <div className="flex items-start gap-2.5">
+          <div className="p-1.5 rounded-full bg-primary/10 shrink-0">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
           </div>
-          <div className="space-y-2 flex-1 min-w-0">
+          <div className="space-y-1.5 flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-semibold">Value Investor Insights</h3>
               <Badge variant="outline" className="text-xs">

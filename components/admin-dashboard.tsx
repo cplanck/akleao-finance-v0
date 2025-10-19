@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Database, TrendingUp, FileText, Activity, Clock, CheckCircle2, XCircle, Loader2, Play } from "lucide-react";
+import { Database, TrendingUp, FileText, Activity, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { OpenAISettingsCard } from "@/components/openai-settings-card";
+import { TrackedSubredditsTable } from "@/components/tracked-subreddits-table";
 import { toast } from "sonner";
 import { io, Socket } from "socket.io-client";
 
@@ -63,16 +64,6 @@ async function fetchScraperHealth(): Promise<ScraperHealth> {
   return response.json();
 }
 
-async function triggerScrape(): Promise<{ message: string; status: string; timestamp: string }> {
-  const response = await fetch(`${API_URL}/api/admin/trigger-scrape`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to trigger scraper");
-  }
-  return response.json();
-}
 
 function formatTimeUntil(dateString: string): string {
   const date = new Date(dateString + (dateString.endsWith('Z') ? '' : 'Z'));
@@ -196,46 +187,6 @@ export function AdminDashboard() {
     }
   }, [health, runStartTime]);
 
-  const triggerMutation = useMutation({
-    mutationFn: triggerScrape,
-    onMutate: async () => {
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ["scraper-health"] });
-
-      // Snapshot the previous value
-      const previousHealth = queryClient.getQueryData(["scraper-health"]);
-
-      // Optimistically update to pending status
-      queryClient.setQueryData(["scraper-health"], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          status: "pending",
-          status_message: "Manual scrape queued, waiting to start",
-        };
-      });
-
-      // Return context with snapshot
-      return { previousHealth };
-    },
-    onSuccess: (data) => {
-      toast.success("Scraper Triggered", {
-        description: "The Reddit scraper has been started manually.",
-      });
-      // Refetch health data to show updated status
-      queryClient.invalidateQueries({ queryKey: ["scraper-health"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
-    },
-    onError: (error: Error, variables, context: any) => {
-      // Rollback on error
-      if (context?.previousHealth) {
-        queryClient.setQueryData(["scraper-health"], context.previousHealth);
-      }
-      toast.error("Error", {
-        description: error.message,
-      });
-    },
-  });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -294,29 +245,8 @@ export function AdminDashboard() {
                 </div>
                 Reddit Scraper
               </CardTitle>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => triggerMutation.mutate()}
-                  disabled={triggerMutation.isPending || (health?.status === "running") || (health?.status === "pending")}
-                  className="gap-2 w-[100px]"
-                >
-                  {triggerMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Starting...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-3 w-3" />
-                      Run Now
-                    </>
-                  )}
-                </Button>
-                <div className="min-w-[80px] flex justify-center">
-                  {health && getStatusBadge(health.status)}
-                </div>
+              <div className="min-w-[80px] flex justify-center">
+                {health && getStatusBadge(health.status)}
               </div>
             </div>
           </CardHeader>
@@ -491,6 +421,9 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Tracked Subreddits Table */}
+      <TrackedSubredditsTable />
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

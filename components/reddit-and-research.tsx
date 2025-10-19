@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, FileText, TrendingUp, ExternalLink, Loader2 } from "lucide-react";
+import { MessageSquare, FileText, TrendingUp, ExternalLink, Loader2, Settings } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ResearchGenerator } from "@/components/research-generator";
+import { SubredditManager } from "@/components/subreddit-manager";
 
 interface RedditPost {
   id: string;
@@ -66,14 +67,14 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
 
   return (
     <Tabs defaultValue="reddit" className="w-full h-full flex flex-col">
-      <Card className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-br from-card/95 via-card/90 to-card/95 border-primary/10 shadow-2xl hover:shadow-primary/5 transition-all duration-500 flex flex-col h-full">
+      <Card className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-br from-card/95 via-card/90 to-card/95 border-primary/10 shadow-2xl hover:shadow-primary/5 transition-all duration-500 flex flex-col h-full max-h-full">
         {/* Ambient gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
 
-        <CardHeader className="pb-2 relative z-10 shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-base">Community & Research</CardTitle>
+        <CardHeader className="pb-2 px-3 pt-3 relative z-10 shrink-0 min-h-[56px]">
+          <div className="flex items-center justify-between h-full">
+            <div className="flex items-center gap-2 min-h-[28px]">
+              <CardTitle className="text-sm">Community & Research</CardTitle>
               {total > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {total}
@@ -89,12 +90,16 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
                 <FileText className="h-3 w-3" />
                 AI Research
               </TabsTrigger>
+              <TabsTrigger value="manage" className="text-xs gap-1.5 px-2">
+                <Settings className="h-3 w-3" />
+                Manage
+              </TabsTrigger>
             </TabsList>
           </div>
         </CardHeader>
-        <CardContent className="pt-0 pb-3 relative z-10 flex-1 overflow-hidden flex flex-col">
+        <CardContent className="pt-0 pb-3 px-3 relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Reddit Tab */}
-          <TabsContent value="reddit" className="mt-0 space-y-1.5 overflow-y-auto flex-1">
+          <TabsContent value="reddit" className="mt-0 space-y-1 flex-1 overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
             {isLoading && (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -109,8 +114,13 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
             )}
 
             {!isLoading && !error && posts.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No Reddit discussions found for ${symbol}
+              <div className="text-center py-8 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  No Reddit discussions found for ${symbol}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Track subreddits in the <strong>Manage</strong> tab to start collecting posts
+                </p>
               </div>
             )}
 
@@ -119,7 +129,7 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
               return (
                 <div
                   key={post.id}
-                  className="border border-border rounded-md p-2 hover:bg-accent/50 transition-colors"
+                  className="border border-border rounded-md p-1.5 hover:bg-accent/50 transition-colors"
                 >
                   {/* Header with subreddit and metadata */}
                   <div className="flex items-center justify-between gap-2 mb-1">
@@ -206,8 +216,13 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
           </TabsContent>
 
           {/* AI Research Tab */}
-          <TabsContent value="research" className="mt-0 flex-1 overflow-y-auto">
+          <TabsContent value="research" className="mt-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
             <ResearchGenerator symbol={symbol} />
+          </TabsContent>
+
+          {/* Manage Subreddits Tab */}
+          <TabsContent value="manage" className="mt-0 flex-1 overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
+            <SubredditManager symbol={symbol} companyName={symbol} />
           </TabsContent>
         </CardContent>
       </Card>

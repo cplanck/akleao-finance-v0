@@ -8,6 +8,8 @@ from .sentiment import SentimentAnalysis
 from .research import ResearchReport
 from .insight import UserInsight
 from .scraper_run import ScraperRun
+from .scraper_job import ScraperJob
+from .tracked_subreddit import TrackedSubreddit, StockSubredditMapping
 from .auth import (
     BetterAuthUser,
     BetterAuthSession,
@@ -28,6 +30,9 @@ __all__ = [
     "ResearchReport",
     "UserInsight",
     "ScraperRun",
+    "ScraperJob",
+    "TrackedSubreddit",
+    "StockSubredditMapping",
     # Better Auth tables
     "BetterAuthUser",
     "BetterAuthSession",

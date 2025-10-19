@@ -39,25 +39,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { api_key } = await request.json();
+    const { api_key, admin_key, key_type } = await request.json();
 
-    if (!api_key || !api_key.startsWith("sk-")) {
-      return NextResponse.json({ error: "Invalid API key format" }, { status: 400 });
+    // Validate based on key_type
+    if (key_type === "admin") {
+      if (!admin_key || !admin_key.startsWith("sk-")) {
+        return NextResponse.json({ error: "Invalid admin API key format" }, { status: 400 });
+      }
+
+      // Encrypt the admin API key
+      const encryptedAdminKey = encrypt(admin_key);
+
+      // Store or update the encrypted admin key
+      await query(
+        `INSERT INTO user_api_keys (user_id, encrypted_admin_key, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id)
+         DO UPDATE SET encrypted_admin_key = $2, updated_at = NOW()`,
+        [session.user.id, encryptedAdminKey]
+      );
+
+      return NextResponse.json({ success: true, message: "Admin API key saved successfully" });
+    } else {
+      // Regular API key
+      if (!api_key || !api_key.startsWith("sk-")) {
+        return NextResponse.json({ error: "Invalid API key format" }, { status: 400 });
+      }
+
+      // Encrypt the API key
+      const encryptedKey = encrypt(api_key);
+
+      // Store or update the encrypted key
+      await query(
+        `INSERT INTO user_api_keys (user_id, encrypted_key, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id)
+         DO UPDATE SET encrypted_key = $2, updated_at = NOW()`,
+        [session.user.id, encryptedKey]
+      );
+
+      return NextResponse.json({ success: true, message: "API key saved successfully" });
     }
-
-    // Encrypt the API key
-    const encryptedKey = encrypt(api_key);
-
-    // Store or update the encrypted key
-    await query(
-      `INSERT INTO user_api_keys (user_id, encrypted_key, updated_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (user_id)
-       DO UPDATE SET encrypted_key = $2, updated_at = NOW()`,
-      [session.user.id, encryptedKey]
-    );
-
-    return NextResponse.json({ success: true, message: "API key saved successfully" });
   } catch (error) {
     console.error("Error saving OpenAI API key:", error);
     return NextResponse.json({ error: "Failed to save API key" }, { status: 500 });
@@ -85,10 +107,11 @@ export async function DELETE(request: NextRequest) {
 }
 
 // Helper function to get decrypted API key (for internal use)
-export async function getDecryptedApiKey(userId: string): Promise<string | null> {
+export async function getDecryptedApiKey(userId: string, keyType: 'regular' | 'admin' = 'regular'): Promise<string | null> {
   try {
-    const result = await query<{ encrypted_key: string }>(
-      "SELECT encrypted_key FROM user_api_keys WHERE user_id = $1",
+    const column = keyType === 'admin' ? 'encrypted_admin_key' : 'encrypted_key';
+    const result = await query<{ encrypted_key?: string; encrypted_admin_key?: string }>(
+      `SELECT ${column} FROM user_api_keys WHERE user_id = $1`,
       [userId]
     );
 
@@ -96,7 +119,13 @@ export async function getDecryptedApiKey(userId: string): Promise<string | null>
       return null;
     }
 
-    return decrypt(result[0].encrypted_key);
+    const encryptedKey = keyType === 'admin' ? result[0].encrypted_admin_key : result[0].encrypted_key;
+
+    if (!encryptedKey) {
+      return null;
+    }
+
+    return decrypt(encryptedKey);
   } catch (error) {
     console.error("Error getting decrypted API key:", error);
     return null;

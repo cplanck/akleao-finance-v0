@@ -345,14 +345,37 @@ def generate_research_report(report: ResearchReport, db: Session):
 
 
 def process_pending_reports(db: Session):
-    """Check for pending research reports and process them."""
-    pending_reports = db.query(ResearchReport).filter(
-        ResearchReport.status == "pending"
-    ).order_by(ResearchReport.created_at).all()
+    """Check for pending research reports and process them.
 
-    for report in pending_reports:
-        print(f"Processing report {report.id} for {report.stock_symbol}")
-        generate_research_report(report, db)
+    Uses SELECT FOR UPDATE SKIP LOCKED to allow multiple workers
+    to process different reports concurrently.
+    """
+    # Fetch one pending report and lock it atomically
+    # This allows multiple workers to grab different reports
+    report = db.execute(
+        text("""
+            UPDATE research_reports
+            SET status = 'generating', started_at = NOW()
+            WHERE id = (
+                SELECT id FROM research_reports
+                WHERE status = 'pending'
+                ORDER BY created_at
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING *
+        """)
+    ).fetchone()
+
+    if report:
+        # Convert to ResearchReport object
+        report_obj = db.query(ResearchReport).filter(
+            ResearchReport.id == report.id
+        ).first()
+
+        if report_obj:
+            print(f"Processing report {report_obj.id} for {report_obj.stock_symbol}")
+            generate_research_report(report_obj, db)
 
 
 def main():

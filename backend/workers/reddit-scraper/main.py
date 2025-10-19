@@ -13,6 +13,7 @@ sys.path.insert(0, "../../shared")
 from shared.models.reddit_post import RedditPost, RedditComment
 from shared.models.stock import Stock
 from shared.models.scraper_run import ScraperRun
+from shared.models.tracked_subreddit import TrackedSubreddit, StockSubredditMapping
 from shared.websocket_client import emit_scraper_status
 
 # Configuration
@@ -22,19 +23,42 @@ REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "AkleaoFinance/1.0")
 DATABASE_URL = os.getenv("DATABASE_URL")
 SCRAPE_INTERVAL_MINUTES = int(os.getenv("SCRAPE_INTERVAL_MINUTES", "15"))
 
-# Subreddits to scrape
-SUBREDDITS = [
-    "wallstreetbets",
-    "stocks",
-    "investing",
-    "StockMarket",
-    "pennystocks",
-    "Daytrading",
-    "options"
-]
-
 # Stock ticker pattern (e.g., $AAPL, $TSLA)
 TICKER_PATTERN = re.compile(r'\$([A-Z]{1,5})\b')
+
+
+def get_active_subreddits(db: Session) -> list[str]:
+    """Load active subreddits from database."""
+    subreddits = db.query(TrackedSubreddit).filter(
+        TrackedSubreddit.is_active == True
+    ).all()
+    return [sub.subreddit_name for sub in subreddits]
+
+
+def get_stock_subreddit_map(db: Session) -> dict[str, list[str]]:
+    """Get mapping of subreddits to their primary stocks.
+
+    Returns:
+        Dict mapping subreddit_name -> [stock_symbols]
+    """
+    mappings = db.query(
+        TrackedSubreddit.subreddit_name,
+        StockSubredditMapping.stock_symbol
+    ).join(
+        StockSubredditMapping,
+        TrackedSubreddit.id == StockSubredditMapping.subreddit_id
+    ).filter(
+        TrackedSubreddit.is_active == True
+    ).all()
+
+    # Build dict: subreddit_name -> list of stock symbols
+    result = {}
+    for subreddit_name, stock_symbol in mappings:
+        if subreddit_name not in result:
+            result[subreddit_name] = []
+        result[subreddit_name].append(stock_symbol)
+
+    return result
 
 
 def extract_stock_tickers(text: str) -> list[str]:
@@ -59,7 +83,7 @@ def ensure_stock_exists(db: Session, symbol: str):
         db.flush()  # Flush to make the stock available for foreign key
 
 
-def process_submission(submission, subreddit_name: str, db: Session) -> bool:
+def process_submission(submission, subreddit_name: str, db: Session, stock_map: dict[str, list[str]]) -> bool:
     """Process a single Reddit submission. Returns True if saved, False if skipped."""
     # Skip if post already exists
     existing = db.query(RedditPost).filter(RedditPost.id == submission.id).first()
@@ -81,6 +105,30 @@ def process_submission(submission, subreddit_name: str, db: Session) -> bool:
     for stock_symbol in mentioned_stocks:
         ensure_stock_exists(db, stock_symbol)
 
+    # Determine primary stock:
+    # 1. If subreddit has mapped stocks and any mentioned stock is in that list, use it
+    # 2. Otherwise, use first mentioned stock
+    # 3. If no mentions and subreddit has a single mapped stock, use that
+    primary_stock = None
+    if mentioned_stocks:
+        mapped_stocks = stock_map.get(subreddit_name, [])
+        # Check if any mentioned stock is mapped to this subreddit
+        for stock in mentioned_stocks:
+            if stock in mapped_stocks:
+                primary_stock = stock
+                break
+        # If no match, just use first mentioned stock
+        if not primary_stock:
+            primary_stock = mentioned_stocks[0]
+    else:
+        # No mentions - if subreddit has exactly one mapped stock, use it
+        mapped_stocks = stock_map.get(subreddit_name, [])
+        if len(mapped_stocks) == 1:
+            primary_stock = mapped_stocks[0]
+            # Add to mentioned_stocks for relevance
+            mentioned_stocks = [primary_stock]
+            ensure_stock_exists(db, primary_stock)
+
     # Create post record
     post = RedditPost(
         id=submission.id,
@@ -93,7 +141,7 @@ def process_submission(submission, subreddit_name: str, db: Session) -> bool:
         upvote_ratio=submission.upvote_ratio,
         num_comments=submission.num_comments,
         mentioned_stocks=json.dumps(mentioned_stocks),
-        primary_stock=mentioned_stocks[0] if mentioned_stocks else None,
+        primary_stock=primary_stock,
         is_processed=False,
         is_relevant=len(mentioned_stocks) > 0,
         created_at=datetime.fromtimestamp(submission.created_utc)
@@ -139,7 +187,7 @@ def process_submission(submission, subreddit_name: str, db: Session) -> bool:
     return True
 
 
-def scrape_subreddit(reddit: praw.Reddit, subreddit_name: str, db: Session):
+def scrape_subreddit(reddit: praw.Reddit, subreddit_name: str, db: Session, stock_map: dict[str, list[str]]):
     """Scrape posts from a subreddit using multiple feeds for comprehensive coverage."""
     print(f"📡 Scraping r/{subreddit_name}...")
 
@@ -149,34 +197,41 @@ def scrape_subreddit(reddit: praw.Reddit, subreddit_name: str, db: Session):
     # 1. Get HOT posts (trending right now)
     print(f"  🔥 Fetching hot posts...")
     for submission in subreddit.hot(limit=100):
-        if process_submission(submission, subreddit_name, db):
+        if process_submission(submission, subreddit_name, db, stock_map):
             posts_saved += 1
 
     # 2. Get NEW posts (most recent, regardless of popularity)
     print(f"  🆕 Fetching new posts...")
     for submission in subreddit.new(limit=100):
-        if process_submission(submission, subreddit_name, db):
+        if process_submission(submission, subreddit_name, db, stock_map):
             posts_saved += 1
 
     # 3. Get TOP posts from last 24 hours (highest scoring recent posts)
     print(f"  ⭐ Fetching top posts from last day...")
     for submission in subreddit.top(time_filter="day", limit=100):
-        if process_submission(submission, subreddit_name, db):
+        if process_submission(submission, subreddit_name, db, stock_map):
             posts_saved += 1
 
     # 4. Get TOP posts from last week (catch anything that went viral)
     print(f"  🏆 Fetching top posts from last week...")
     for submission in subreddit.top(time_filter="week", limit=50):
-        if process_submission(submission, subreddit_name, db):
+        if process_submission(submission, subreddit_name, db, stock_map):
             posts_saved += 1
 
     print(f"  ✨ Saved {posts_saved} new posts from r/{subreddit_name}")
+
+    # Update last_scraped_at for this subreddit
+    tracked_sub = db.query(TrackedSubreddit).filter(
+        TrackedSubreddit.subreddit_name == subreddit_name
+    ).first()
+    if tracked_sub:
+        tracked_sub.last_scraped_at = datetime.utcnow()
+        db.commit()
 
 
 def main():
     """Main scraper loop."""
     print("🚀 Starting Reddit Scraper Worker")
-    print(f"📊 Monitoring subreddits: {', '.join(SUBREDDITS)}")
     print(f"⏱️  Scrape interval: {SCRAPE_INTERVAL_MINUTES} minutes")
 
     # Initialize Reddit API
@@ -189,6 +244,13 @@ def main():
     # Initialize database connection
     engine = create_engine(DATABASE_URL)
     db = Session(engine)
+
+    # Load active subreddits from database
+    subreddits = get_active_subreddits(db)
+    stock_map = get_stock_subreddit_map(db)
+    print(f"📊 Monitoring {len(subreddits)} active subreddits: {', '.join(subreddits)}")
+    if stock_map:
+        print(f"🎯 Stock-specific subreddits: {len([s for s in stock_map if stock_map[s]])}")
 
     while True:
         # Check for pending manual triggers first
@@ -234,11 +296,16 @@ def main():
         try:
             print(f"\n🔄 Starting scrape cycle at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-            for subreddit in SUBREDDITS:
+            # Refresh subreddit list and stock map before each cycle
+            subreddits = get_active_subreddits(db)
+            stock_map = get_stock_subreddit_map(db)
+            print(f"📊 Scraping {len(subreddits)} active subreddits")
+
+            for subreddit in subreddits:
                 try:
                     # Count posts before scraping
                     posts_before = db.query(RedditPost).count()
-                    scrape_subreddit(reddit, subreddit, db)
+                    scrape_subreddit(reddit, subreddit, db, stock_map)
                     # Count posts after scraping
                     posts_after = db.query(RedditPost).count()
                     posts_count += (posts_after - posts_before)

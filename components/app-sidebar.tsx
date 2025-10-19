@@ -95,23 +95,26 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
+      <SidebarHeader className="border-b border-border/50 pb-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
               className="data-[slot=sidebar-menu-button]:!p-2 hover:bg-transparent"
             >
-              <a href="/" className="flex items-center gap-2">
+              <a href="/" className="flex items-center gap-2 group">
                 {mounted && (
-                  <Image
-                    src={logoSrc}
-                    alt="Akleao Finance Logo"
-                    width={140}
-                    height={40}
-                    className="object-contain"
-                    priority
-                  />
+                  <div className="relative">
+                    <Image
+                      src={logoSrc}
+                      alt="Akleao Finance Logo"
+                      width={140}
+                      height={40}
+                      className="object-contain transition-transform duration-300 group-hover:scale-105"
+                      priority
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg blur-xl -z-10" />
+                  </div>
                 )}
               </a>
             </SidebarMenuButton>

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from config import settings
 from database import init_db
-from routers import auth, stocks, insights, sentiment, research, admin
+from routers import auth, stocks, insights, sentiment, research, admin, reddit
 from websocket_manager import sio, socket_app
 import socketio
 
@@ -48,6 +48,7 @@ app.include_router(insights.router, prefix="/api/insights", tags=["Insights"])
 app.include_router(sentiment.router, prefix="/api/sentiment", tags=["Sentiment"])
 app.include_router(research.router, tags=["Research"])  # prefix already defined in router
 app.include_router(admin.router, tags=["Admin"])
+app.include_router(reddit.router, tags=["Reddit"])  # prefix already defined in router
 
 
 @app.get("/")
