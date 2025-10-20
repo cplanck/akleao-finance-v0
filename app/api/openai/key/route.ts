@@ -105,29 +105,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Failed to delete API key" }, { status: 500 });
   }
 }
-
-// Helper function to get decrypted API key (for internal use)
-export async function getDecryptedApiKey(userId: string, keyType: 'regular' | 'admin' = 'regular'): Promise<string | null> {
-  try {
-    const column = keyType === 'admin' ? 'encrypted_admin_key' : 'encrypted_key';
-    const result = await query<{ encrypted_key?: string; encrypted_admin_key?: string }>(
-      `SELECT ${column} FROM user_api_keys WHERE user_id = $1`,
-      [userId]
-    );
-
-    if (result.length === 0) {
-      return null;
-    }
-
-    const encryptedKey = keyType === 'admin' ? result[0].encrypted_admin_key : result[0].encrypted_key;
-
-    if (!encryptedKey) {
-      return null;
-    }
-
-    return decrypt(encryptedKey);
-  } catch (error) {
-    console.error("Error getting decrypted API key:", error);
-    return null;
-  }
-}
