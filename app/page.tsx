@@ -1,24 +1,80 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import StockSelector from "@/components/stock-selector";
-import StockChart from "@/components/stock-chart";
-import KeyMetrics from "@/components/key-metrics";
-import FundamentalsSummary from "@/components/fundamentals-summary";
-import { MarketStatus } from "@/components/market-status";
-import { CommandMenu } from "@/components/command-menu";
-import { RedditAndResearch } from "@/components/reddit-and-research";
-import { fetchStockQuote, fetchStockOverview } from "@/lib/stock-api";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { MessageSquare, ArrowUp, Sparkles } from "lucide-react";
+import Link from "next/link";
 
-function getTimeAgo(date: Date): string {
-  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+
+interface RedditPost {
+  id: string;
+  subreddit: string;
+  title: string;
+  content: string | null;
+  author: string;
+  url: string;
+  score: number;
+  num_comments: number;
+  mentioned_stocks: string | string[];
+  primary_stock: string | null;
+  posted_at: string;
+  created_at: string;
+  track_comments: boolean;
+}
+
+interface HeatScore {
+  post: RedditPost;
+  heat: number;
+  recencyScore: number;
+  engagementScore: number;
+}
+
+async function fetchRecentPosts(): Promise<RedditPost[]> {
+  const res = await fetch(`${API_URL}/api/admin/reddit-posts?limit=200&offset=0`);
+  if (!res.ok) throw new Error("Failed to fetch posts");
+  const data = await res.json();
+  return data.posts;
+}
+
+function calculateHeatScore(post: RedditPost): HeatScore {
+  const now = new Date();
+
+  // When we started tracking this post (created_at = when we indexed it)
+  const trackedAt = new Date(post.created_at);
+  const hoursTracked = (now.getTime() - trackedAt.getTime()) / (1000 * 60 * 60);
+
+  // Recency score: heavily favor newly tracked posts
+  // Posts lose 50% of recency value every 6 hours (faster decay)
+  const recencyScore = Math.exp(-hoursTracked / 6) * 100;
+
+  // Engagement score: combination of score and comments
+  // Normalize by typical values (score weight: 60%, comments: 40%)
+  const normalizedScore = Math.min(post.score / 50, 10) * 6;
+  const normalizedComments = Math.min(post.num_comments / 30, 10) * 4;
+  const engagementScore = (normalizedScore + normalizedComments) * 10;
+
+  // Combined heat: 70% recency of tracking, 30% engagement
+  // This heavily favors new posts that we just started tracking with high engagement
+  const heat = (recencyScore * 0.7) + (engagementScore * 0.3);
+
+  return {
+    post,
+    heat,
+    recencyScore,
+    engagementScore
+  };
+}
+
+function getTimeAgo(dateString: string): string {
+  const now = new Date();
+  const posted = new Date(dateString);
+  const seconds = Math.floor((now.getTime() - posted.getTime()) / 1000);
 
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
@@ -29,224 +85,143 @@ function getTimeAgo(date: Date): string {
   return `${days}d ago`;
 }
 
-export default function Home() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  // Get stock from URL, default to AAPL
-  const stockFromUrl = searchParams.get("symbol") || "AAPL";
-  const [selectedStock, setSelectedStock] = useState(stockFromUrl);
-  const [dataFetchedAt, setDataFetchedAt] = useState<Date>(new Date());
-  const [timeAgo, setTimeAgo] = useState<string>("just now");
-  const [showFundamentals, setShowFundamentals] = useState(false);
-  const [showFullDescription, setShowFullDescription] = useState(false);
-  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
-
-  // Sync URL with selected stock
-  useEffect(() => {
-    if (stockFromUrl !== selectedStock) {
-      setSelectedStock(stockFromUrl);
-    }
-  }, [stockFromUrl]);
-
-  // Update URL when stock changes
-  const handleSelectStock = (symbol: string) => {
-    setSelectedStock(symbol);
-    router.push(`/?symbol=${symbol}`, { scroll: false });
-  };
-
-  const { data: quote, isLoading: quoteLoading, dataUpdatedAt: quoteUpdatedAt } = useQuery({
-    queryKey: ["quote", selectedStock],
-    queryFn: () => fetchStockQuote(selectedStock),
+export default function HomePage() {
+  const { data: posts, isLoading } = useQuery({
+    queryKey: ["recent-posts"],
+    queryFn: fetchRecentPosts,
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const { data: overview, isLoading: overviewLoading } = useQuery({
-    queryKey: ["overview", selectedStock],
-    queryFn: () => fetchStockOverview(selectedStock),
-  });
-
-  // Update dataFetchedAt when quote data is fetched
-  useEffect(() => {
-    if (quoteUpdatedAt) {
-      setDataFetchedAt(new Date(quoteUpdatedAt));
-    }
-  }, [quoteUpdatedAt]);
-
-  // Update time ago every 10 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeAgo(getTimeAgo(dataFetchedAt));
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [dataFetchedAt]);
+  // Calculate heat scores and sort
+  const rankedPosts = posts
+    ? posts
+        .map(calculateHeatScore)
+        .sort((a, b) => b.heat - a.heat)
+        .slice(0, 50) // Top 50 hottest posts
+    : [];
 
   return (
     <SidebarProvider>
-      <CommandMenu
-        open={commandMenuOpen}
-        onOpenChange={setCommandMenuOpen}
-        onSelectStock={handleSelectStock}
-      />
-      <AppSidebar
-        variant="inset"
-        selectedStock={selectedStock}
-        onSelectStock={handleSelectStock}
-      />
+      <AppSidebar variant="inset" />
       <SidebarInset>
         <SiteHeader />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-1.5">
             <div className="flex flex-col gap-2 py-2 md:gap-3 md:py-3">
-              {/* Main Content */}
-              <div className="px-3 lg:px-4 space-y-3">
-        {/* Market Status & Stock Selector */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <MarketStatus />
-          <StockSelector
-            selectedStock={selectedStock}
-            onSelectStock={handleSelectStock}
-          />
-        </div>
-
-        {/* Chart and Reddit/Research - 50/50 Split */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 lg:gap-3">
-          {/* Chart */}
-          <div className="h-[400px] sm:h-[500px] md:h-[600px]">
-            <StockChart
-              symbol={selectedStock}
-              quote={quote}
-              overview={overview}
-              quoteLoading={quoteLoading}
-              overviewLoading={overviewLoading}
-            />
-          </div>
-
-          {/* Reddit Discussions & AI Research */}
-          <div className="h-[400px] sm:h-[500px] md:h-[600px]">
-            <RedditAndResearch symbol={selectedStock} />
-          </div>
-        </div>
-
-        {/* Fundamentals Section */}
-        <div className="space-y-2.5">
-          <button
-            onClick={() => setShowFundamentals(!showFundamentals)}
-            className="group flex items-center justify-between w-full p-2.5 text-left bg-gradient-to-br from-card/95 via-card/90 to-card/95 backdrop-blur-xl border border-primary/10 rounded-xl hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 transition-all duration-300 relative overflow-hidden"
-          >
-            {/* Ambient gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
-            <div className="flex items-center gap-2 relative z-10">
-              <div className={`h-7 w-7 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center transition-all duration-300 ${showFundamentals ? 'rotate-180 scale-110' : 'group-hover:scale-110'}`}>
-                <svg
-                  className="h-4 w-4 text-primary transition-transform duration-300"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <div>
-                <span className="text-sm font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">Key Metrics & Fundamentals</span>
-                <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Detailed financial analysis and ratios</p>
-              </div>
-            </div>
-            <svg
-              className={`h-4 w-4 transition-all duration-300 relative z-10 text-primary ${showFundamentals ? 'rotate-180 scale-110' : 'group-hover:scale-110'}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {showFundamentals && (
-            <div className="animate-in slide-in-from-top-4 duration-300 fade-in">
-              <KeyMetrics symbol={selectedStock} />
-            </div>
-          )}
-        </div>
-
-        {/* Company Info */}
-        <Card className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-br from-card/95 via-card/90 to-card/95 border-primary/10 shadow-xl hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 group">
-          {/* Ambient gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
-
-          <CardHeader className="relative z-10 px-3 pt-3 pb-2">
-            <CardTitle className="text-lg sm:text-xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                <svg className="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              {overviewLoading ? <Skeleton className="h-6 w-48" /> : `About ${overview?.name || selectedStock}`}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 relative z-10 px-3 pb-3">
-            {overviewLoading ? (
-              <>
-                <Skeleton className="h-[84px] w-full rounded-lg" />
-                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                  <Skeleton className="h-[52px] w-full rounded-lg" />
-                  <Skeleton className="h-[52px] w-full rounded-lg" />
-                  <Skeleton className="h-[52px] w-full rounded-lg" />
-                  <Skeleton className="h-[52px] w-full rounded-lg" />
-                </div>
-              </>
-            ) : overview ? (
-              <>
-                <div className="relative min-h-[84px]">
-                  <p className={`text-sm text-muted-foreground leading-relaxed font-medium transition-all duration-300 ${showFullDescription ? '' : 'line-clamp-3'}`}>
-                    {overview.description}
-                  </p>
-                  {overview.description && overview.description.length > 200 && (
-                    <button
-                      onClick={() => setShowFullDescription(!showFullDescription)}
-                      className="text-xs text-primary hover:text-primary/80 font-medium mt-1 flex items-center gap-1 transition-colors"
-                    >
-                      {showFullDescription ? (
-                        <>
-                          Show less
-                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                          </svg>
-                        </>
-                      ) : (
-                        <>
-                          See more
-                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
-                  <div className="p-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md h-[52px]">
-                    <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">Sector</span>
-                    <p className="font-bold text-sm mt-0.5">{overview.sector}</p>
+              <div className="px-3 lg:px-4 space-y-4">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">
+                      For You
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Curated discussions based on recent activity
+                    </p>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md h-[52px]">
-                    <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">Industry</span>
-                    <p className="font-bold text-sm mt-0.5">{overview.industry}</p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md h-[52px]">
-                    <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">Employees</span>
-                    <p className="font-bold text-sm font-mono tabular-nums mt-0.5">{overview.employees}</p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md h-[52px]">
-                    <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">Market Cap</span>
-                    <p className="font-bold text-sm font-mono tabular-nums mt-0.5">{overview.marketCap}</p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span className="text-muted-foreground">Personalized</span>
                   </div>
                 </div>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
+
+                {/* Posts Grid */}
+                {isLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(10)].map((_, i) => (
+                      <Skeleton key={i} className="h-32 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {rankedPosts.map(({ post, heat, recencyScore, engagementScore }) => {
+                      const mentionedStocks = Array.isArray(post.mentioned_stocks)
+                        ? post.mentioned_stocks
+                        : typeof post.mentioned_stocks === "string"
+                        ? JSON.parse(post.mentioned_stocks)
+                        : [];
+
+                      return (
+                        <Link
+                          key={post.id}
+                          href={`/admin/posts?post=${post.id}`}
+                          className="block group"
+                        >
+                          <Card className="p-4 hover:shadow-lg hover:border-primary/30 transition-all duration-300 cursor-pointer">
+                            <div className="space-y-3">
+                              {/* Header Row */}
+                              <div className="flex items-start gap-3">
+                                <div className="flex-1 space-y-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant="outline" className="text-xs">
+                                      r/{post.subreddit}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      by u/{post.author}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      •
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {getTimeAgo(post.posted_at)}
+                                    </span>
+                                  </div>
+                                  <h3 className="font-semibold text-base leading-tight group-hover:text-primary transition-colors line-clamp-2">
+                                    {post.title}
+                                  </h3>
+                                </div>
+                              </div>
+
+                              {/* Content Preview */}
+                              {post.content && (
+                                <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                                  {post.content}
+                                </p>
+                              )}
+
+                              {/* Footer Row */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                  <div className="flex items-center gap-1">
+                                    <ArrowUp className="h-3 w-3" />
+                                    <span className="font-mono">{post.score.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <MessageSquare className="h-3 w-3" />
+                                    <span className="font-mono">{post.num_comments.toLocaleString()}</span>
+                                  </div>
+                                </div>
+
+                                {/* Stock Tags */}
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {mentionedStocks.slice(0, 3).map((stock: string) => (
+                                    <Link
+                                      key={stock}
+                                      href={`/research?symbol=${stock}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Badge
+                                        variant={stock === post.primary_stock ? "default" : "secondary"}
+                                        className="text-xs cursor-pointer hover:bg-primary/80 transition-colors"
+                                      >
+                                        ${stock}
+                                      </Badge>
+                                    </Link>
+                                  ))}
+                                  {mentionedStocks.length > 3 && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      +{mentionedStocks.length - 3}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>

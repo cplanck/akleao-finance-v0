@@ -60,7 +60,7 @@ export function CommandMenu({ open, onOpenChange, onSelectStock }: CommandMenuPr
     if (onSelectStock) {
       onSelectStock(symbol);
     } else {
-      router.push(`/?symbol=${symbol}`);
+      router.push(`/research?symbol=${symbol}`);
     }
 
     onOpenChange(false);

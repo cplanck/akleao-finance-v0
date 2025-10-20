@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Dialog,
   DialogContent,
@@ -8,12 +9,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, ArrowUp, ExternalLink, TrendingUp, Eye, Clock } from "lucide-react";
+import { MessageSquare, ArrowUp, ExternalLink, TrendingUp, Eye, Clock, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AIOverview } from "./ai-overview";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -52,6 +55,36 @@ interface RedditComment {
   replies: RedditComment[];
 }
 
+interface PostAnalysis {
+  id: number;
+  stock_symbol: string | null;
+  strategy_used: "preprocessed" | "direct";
+  comments_included: number;
+  comments_preprocessed: number | null;
+  executive_summary: string;
+  sentiment_breakdown: {
+    bullish: number;
+    bearish: number;
+    neutral: number;
+  };
+  key_arguments: Array<{
+    type: "bull" | "bear";
+    summary: string;
+    quote: string;
+  }>;
+  thread_quality_score: number;
+  notable_quotes: Array<{
+    quote: string;
+    author: string;
+    comment_id: string;
+  }>;
+  model_used: string;
+  tokens_used: number;
+  processing_time_seconds: number;
+  cost_estimate: number;
+  created_at: string;
+}
+
 interface PostDetailsDialogProps {
   post: RedditPost | null;
   open: boolean;
@@ -61,6 +94,27 @@ interface PostDetailsDialogProps {
 async function fetchComments(postId: string): Promise<RedditComment[]> {
   const res = await fetch(`${API_URL}/api/admin/reddit-posts/${postId}/comments`);
   if (!res.ok) throw new Error("Failed to fetch comments");
+  return res.json();
+}
+
+async function fetchAnalyses(postId: string): Promise<{ analyses: PostAnalysis[] }> {
+  const res = await fetch(`${API_URL}/api/admin/reddit-posts/${postId}/analyses`);
+  if (!res.ok) throw new Error("Failed to fetch analyses");
+  return res.json();
+}
+
+async function generateAnalysis(
+  postId: string,
+  strategy: "preprocessed" | "direct"
+): Promise<PostAnalysis> {
+  // Call Next.js API route (handles auth and passes user_id)
+  const res = await fetch(`/api/admin/reddit-posts/${postId}/analyze?strategy=${strategy}`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to generate analysis" }));
+    throw new Error(error.error || error.detail || "Failed to generate analysis");
+  }
   return res.json();
 }
 
@@ -168,13 +222,14 @@ function CommentThread({
           {commentStocks.length > 0 && (
             <>
               {commentStocks.map((stock: string) => (
-                <Badge
-                  key={stock}
-                  variant="secondary"
-                  className="text-xs"
-                >
-                  ${stock}
-                </Badge>
+                <Link key={stock} href={`/research?symbol=${stock}`}>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                  >
+                    ${stock}
+                  </Badge>
+                </Link>
               ))}
             </>
           )}
@@ -201,9 +256,19 @@ function CommentThread({
 export function PostDetailsDialog({ post, open, onOpenChange }: PostDetailsDialogProps) {
   const [comments, setComments] = useState<RedditComment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [analyses, setAnalyses] = useState<PostAnalysis[]>([]);
+  const [isLoadingAnalyses, setIsLoadingAnalyses] = useState(false);
+  const [isGenerating, setIsGenerating] = useState<"preprocessed" | "direct" | null>(null);
+  const [selectedAnalysis, setSelectedAnalysis] = useState<PostAnalysis | null>(null);
 
   useEffect(() => {
     if (post && open) {
+      // Reset state when post changes
+      setComments([]);
+      setAnalyses([]);
+      setSelectedAnalysis(null);
+      setIsGenerating(null);
+
       setIsLoading(true);
       fetchComments(post.id)
         .then(setComments)
@@ -212,8 +277,39 @@ export function PostDetailsDialog({ post, open, onOpenChange }: PostDetailsDialo
           setComments([]);
         })
         .finally(() => setIsLoading(false));
+
+      // Also fetch existing analyses
+      setIsLoadingAnalyses(true);
+      fetchAnalyses(post.id)
+        .then((data) => {
+          setAnalyses(data.analyses);
+          if (data.analyses.length > 0) {
+            setSelectedAnalysis(data.analyses[0]); // Select most recent
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to load analyses:", error);
+          setAnalyses([]);
+        })
+        .finally(() => setIsLoadingAnalyses(false));
     }
-  }, [post, open]);
+  }, [post?.id, open]);
+
+  const handleGenerateAnalysis = async (strategy: "preprocessed" | "direct") => {
+    if (!post) return;
+
+    setIsGenerating(strategy);
+    try {
+      const newAnalysis = await generateAnalysis(post.id, strategy);
+      setAnalyses((prev) => [newAnalysis, ...prev]);
+      setSelectedAnalysis(newAnalysis);
+    } catch (error) {
+      console.error(`Failed to generate ${strategy} analysis:`, error);
+      alert(`Failed to generate analysis: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsGenerating(null);
+    }
+  };
 
   if (!post) return null;
 
@@ -291,86 +387,124 @@ export function PostDetailsDialog({ post, open, onOpenChange }: PostDetailsDialo
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-medium">Stocks:</span>
                 {post.primary_stock && (
-                  <Badge variant="default" className="text-xs">
-                    ${post.primary_stock}
-                  </Badge>
+                  <Link href={`/research?symbol=${post.primary_stock}`}>
+                    <Badge variant="default" className="text-xs cursor-pointer hover:bg-primary/80 transition-colors">
+                      ${post.primary_stock}
+                    </Badge>
+                  </Link>
                 )}
                 {stocks
                   .filter((s: string) => s !== post.primary_stock)
                   .map((stock: string) => (
-                    <Badge key={stock} variant="secondary" className="text-xs">
-                      ${stock}
-                    </Badge>
+                    <Link key={stock} href={`/research?symbol=${stock}`}>
+                      <Badge variant="secondary" className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors">
+                        ${stock}
+                      </Badge>
+                    </Link>
                   ))}
               </div>
             )}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 mt-4">
-          {/* Post Content */}
-          {post.content && (
-            <div className="rounded-lg border p-4 bg-muted/30">
-              <h4 className="text-sm font-semibold mb-3 text-muted-foreground">
-                Post Content
-              </h4>
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {post.content}
-                </ReactMarkdown>
-              </div>
-            </div>
-          )}
+        <Tabs defaultValue="comments" className="mt-4">
+          <TabsList className="w-full justify-start">
+            <TabsTrigger value="comments" className="gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5" />
+              Comments
+              {comments.length > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                  {comments.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="ai-overview" className="gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              AI Overview
+              {analyses.length > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                  {analyses.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Comments */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                <h3 className="font-semibold">
-                  Comments
-                </h3>
+          <TabsContent value="comments" className="space-y-6 mt-4">
+            {/* Post Content */}
+            {post.content && (
+              <div className="rounded-lg border p-4 bg-muted/30">
+                <h4 className="text-sm font-semibold mb-3 text-muted-foreground">
+                  Post Content
+                </h4>
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {post.content}
+                  </ReactMarkdown>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                {comments.length > 0 && (
-                  <>
-                    <span>{comments.length} crawled</span>
-                    <span>•</span>
-                  </>
-                )}
-                <span>{post.num_comments} on Reddit</span>
-                <span>•</span>
-                <span>Sorted by score</span>
-              </div>
-            </div>
-
-            {isLoading ? (
-              <div className="space-y-4">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
-                ))}
-              </div>
-            ) : comments.length > 0 ? (
-              <div className="space-y-3">
-                {comments.map((comment, index) => (
-                  <CommentThread
-                    key={comment.id}
-                    comment={comment}
-                    index={index}
-                    totalTopLevel={comments.length}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                No comments available
-              </p>
             )}
-          </div>
-        </div>
+
+            {/* Comments */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  <h3 className="font-semibold">
+                    Comments
+                  </h3>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {comments.length > 0 && (
+                    <>
+                      <span>{comments.length} crawled</span>
+                      <span>•</span>
+                    </>
+                  )}
+                  <span>{post.num_comments} on Reddit</span>
+                  <span>•</span>
+                  <span>Sorted by score</span>
+                </div>
+              </div>
+
+              {isLoading ? (
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-16 w-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : comments.length > 0 ? (
+                <div className="space-y-3">
+                  {comments.map((comment, index) => (
+                    <CommentThread
+                      key={comment.id}
+                      comment={comment}
+                      index={index}
+                      totalTopLevel={comments.length}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No comments available
+                </p>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ai-overview" className="mt-4">
+            <AIOverview
+              isLoadingAnalyses={isLoadingAnalyses}
+              analyses={analyses}
+              selectedAnalysis={selectedAnalysis}
+              isGenerating={isGenerating}
+              onGenerateAnalysis={handleGenerateAnalysis}
+              onSelectAnalysis={setSelectedAnalysis}
+            />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

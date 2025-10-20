@@ -74,5 +74,11 @@ class RedditComment(Base, TimestampMixin):
     parent_id = Column(String(20), nullable=True)  # ID of parent comment (None for top-level)
     depth = Column(Integer, default=0)  # Nesting depth (0 for top-level)
 
+    # AI quality scoring (for preprocessed analysis)
+    quality_score = Column(Float)  # 0-1 rating from GPT-4o-mini
+    insight_type = Column(String(20))  # 'analysis', 'data', 'experience', 'noise'
+    ai_summary = Column(Text)  # 1-2 sentence extraction
+    is_ai_processed = Column(Boolean, default=False)
+
     # Relationships
     post = relationship("RedditPost", back_populates="comments")

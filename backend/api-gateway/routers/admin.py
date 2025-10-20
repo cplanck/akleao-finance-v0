@@ -12,9 +12,19 @@ import ast
 import os
 sys.path.insert(0, "../shared")
 from shared.models.reddit_post import RedditPost, RedditComment
+from shared.models.post_analysis import PostAnalysis
 from shared.models.stock import Stock
 from shared.models.scraper_run import ScraperRun
 from shared.models.tracked_subreddit import TrackedSubreddit
+from shared.ai_analysis import (
+    score_comment_quality,
+    analyze_post_preprocessed,
+    analyze_post_direct,
+    get_openai_client,
+    get_user_api_key,
+    COMMENT_SCORING_MODEL,
+    POST_ANALYSIS_MODEL,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -67,10 +77,10 @@ async def get_reddit_posts(
     total = total_result.scalar()
 
     # Get paginated results
-    # Order by: tracked posts first (track_comments DESC), then by created_at DESC
+    # Order by: tracked posts first (track_comments DESC), then by posted_at DESC (newest posts first)
     stmt = stmt.order_by(
         desc(RedditPost.track_comments),
-        desc(RedditPost.created_at)
+        desc(RedditPost.posted_at)
     ).offset(offset).limit(limit)
     result = await db.execute(stmt)
     posts = result.scalars().all()
@@ -586,3 +596,360 @@ async def trigger_scrape(db: AsyncSession = Depends(get_db)):
         "status": "pending",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@router.post("/reddit-posts/{post_id}/analyze")
+async def analyze_post(
+    post_id: str,
+    strategy: str = Query("direct", regex="^(preprocessed|direct)$"),
+    user_id: str = Query(..., description="User ID for API key lookup"),
+    max_comments: int = Query(100, ge=10, le=500),
+    min_score: int = Query(1, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate AI analysis for a Reddit post using specified strategy.
+
+    Strategies:
+    - preprocessed: Score each comment with GPT-4o-mini first, then analyze with GPT-4o
+    - direct: Send raw comments directly to GPT-4o
+
+    This endpoint is designed for on-demand generation via button click.
+    """
+    import time as time_module
+    from sqlalchemy import and_
+
+    # Fetch the post
+    post_stmt = select(RedditPost).where(RedditPost.id == post_id)
+    post_result = await db.execute(post_stmt)
+    post = post_result.scalar_one_or_none()
+
+    if not post:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+
+    # Fetch comments, sorted by score, with minimum score filter
+    comments_stmt = (
+        select(RedditComment)
+        .where(
+            and_(
+                RedditComment.post_id == post_id,
+                RedditComment.score >= min_score
+            )
+        )
+        .order_by(desc(RedditComment.score))
+        .limit(max_comments)
+    )
+    comments_result = await db.execute(comments_stmt)
+    comments = comments_result.scalars().all()
+
+    if not comments:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No comments found for post {post_id} with score >= {min_score}"
+        )
+
+    # Get user's OpenAI API key
+    try:
+        user_api_key = await get_user_api_key(db, user_id)
+        client = get_openai_client(user_api_key)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve API key: {str(e)}")
+
+    start_time = time_module.time()
+    total_cost = 0.0
+    total_tokens = 0
+    comments_preprocessed_count = 0
+
+    try:
+        if strategy == "preprocessed":
+            # Strategy A: Preprocess each comment with GPT-4o-mini
+            scored_comments = []
+
+            for comment in comments:
+                # Skip if already processed (future optimization)
+                score_result = score_comment_quality(comment, post, client)
+
+                # Update comment in database with quality metrics
+                comment_stmt = (
+                    select(RedditComment)
+                    .where(RedditComment.id == comment.id)
+                )
+                db_comment_result = await db.execute(comment_stmt)
+                db_comment = db_comment_result.scalar_one()
+
+                db_comment.quality_score = score_result["quality_score"]
+                db_comment.insight_type = score_result["insight_type"]
+                db_comment.ai_summary = score_result["ai_summary"]
+                db_comment.is_ai_processed = True
+
+                scored_comments.append({
+                    "comment": comment,
+                    "quality_score": score_result["quality_score"],
+                    "insight_type": score_result["insight_type"],
+                    "ai_summary": score_result["ai_summary"]
+                })
+
+                total_cost += score_result["cost_estimate"]
+                total_tokens += score_result["tokens_used"]
+                comments_preprocessed_count += 1
+
+            await db.commit()
+
+            # Sort by quality score (highest first) and take top comments
+            scored_comments.sort(key=lambda x: x["quality_score"], reverse=True)
+            top_comments = scored_comments[:max_comments]
+
+            # Generate analysis with preprocessed comments
+            analysis_result = analyze_post_preprocessed(post, top_comments, client)
+
+        else:  # strategy == "direct"
+            # Strategy B: Send raw comments to GPT-4o
+            analysis_result = analyze_post_direct(post, comments, client)
+
+        # Add to total cost/tokens
+        total_cost += analysis_result["cost_estimate"]
+        total_tokens += analysis_result["tokens_used"]
+
+        # Calculate processing time
+        processing_time = time_module.time() - start_time
+
+        # Store analysis in database
+        analysis = PostAnalysis(
+            post_id=post_id,
+            stock_symbol=analysis_result.get("stock_symbol"),
+            strategy_used=strategy,
+            comments_included=len(comments),
+            comments_preprocessed=comments_preprocessed_count if strategy == "preprocessed" else None,
+            executive_summary=analysis_result["executive_summary"],
+            sentiment_breakdown=analysis_result["sentiment_breakdown"],
+            key_arguments=analysis_result["key_arguments"],
+            thread_quality_score=analysis_result["thread_quality_score"],
+            notable_quotes=analysis_result["notable_quotes"],
+            model_used=f"{COMMENT_SCORING_MODEL}+{POST_ANALYSIS_MODEL}" if strategy == "preprocessed" else POST_ANALYSIS_MODEL,
+            tokens_used=total_tokens,
+            processing_time_seconds=processing_time,
+            cost_estimate=total_cost
+        )
+
+        db.add(analysis)
+        await db.commit()
+        await db.refresh(analysis)
+
+        return {
+            "id": analysis.id,
+            "post_id": post_id,
+            "stock_symbol": analysis.stock_symbol,
+            "strategy_used": strategy,
+            "comments_included": len(comments),
+            "comments_preprocessed": comments_preprocessed_count if strategy == "preprocessed" else None,
+            "executive_summary": analysis.executive_summary,
+            "sentiment_breakdown": analysis.sentiment_breakdown,
+            "key_arguments": analysis.key_arguments,
+            "thread_quality_score": analysis.thread_quality_score,
+            "notable_quotes": analysis.notable_quotes,
+            "model_used": analysis.model_used,
+            "tokens_used": total_tokens,
+            "processing_time_seconds": round(processing_time, 2),
+            "cost_estimate": round(total_cost, 4),
+            "created_at": analysis.created_at.isoformat()
+        }
+
+    except Exception as e:
+        import traceback
+        print(f"ERROR in analyze_post: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/reddit-posts/{post_id}/analyses")
+async def get_post_analyses(
+    post_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all AI analyses for a specific Reddit post."""
+    # Verify post exists
+    post_stmt = select(RedditPost).where(RedditPost.id == post_id)
+    post_result = await db.execute(post_stmt)
+    post = post_result.scalar_one_or_none()
+
+    if not post:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+
+    # Fetch all analyses for this post, sorted by created_at descending
+    analyses_stmt = (
+        select(PostAnalysis)
+        .where(PostAnalysis.post_id == post_id)
+        .order_by(desc(PostAnalysis.created_at))
+    )
+    analyses_result = await db.execute(analyses_stmt)
+    analyses = analyses_result.scalars().all()
+
+    return {
+        "post_id": post_id,
+        "analyses": [
+            {
+                "id": analysis.id,
+                "stock_symbol": analysis.stock_symbol,
+                "strategy_used": analysis.strategy_used,
+                "comments_included": analysis.comments_included,
+                "comments_preprocessed": analysis.comments_preprocessed,
+                "executive_summary": analysis.executive_summary,
+                "sentiment_breakdown": analysis.sentiment_breakdown,
+                "key_arguments": analysis.key_arguments,
+                "thread_quality_score": analysis.thread_quality_score,
+                "notable_quotes": analysis.notable_quotes,
+                "model_used": analysis.model_used,
+                "tokens_used": analysis.tokens_used,
+                "processing_time_seconds": analysis.processing_time_seconds,
+                "cost_estimate": analysis.cost_estimate,
+                "created_at": analysis.created_at.isoformat()
+            }
+            for analysis in analyses
+        ]
+    }
+
+
+@router.get("/analyses")
+async def get_all_analyses(
+    stock: Optional[str] = None,
+    strategy: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all AI analyses with optional filters."""
+    # Build query
+    stmt = (
+        select(PostAnalysis, RedditPost)
+        .join(RedditPost, PostAnalysis.post_id == RedditPost.id)
+    )
+
+    # Apply filters
+    if stock:
+        stmt = stmt.where(PostAnalysis.stock_symbol == stock.upper())
+    if strategy:
+        stmt = stmt.where(PostAnalysis.strategy_used == strategy)
+
+    # Get total count
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar()
+
+    # Get paginated results, ordered by created_at descending
+    stmt = stmt.order_by(desc(PostAnalysis.created_at)).offset(offset).limit(limit)
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return {
+        "analyses": [
+            {
+                "id": row.PostAnalysis.id,
+                "post_id": row.PostAnalysis.post_id,
+                "post_title": row.RedditPost.title,
+                "subreddit": row.RedditPost.subreddit,
+                "stock_symbol": row.PostAnalysis.stock_symbol,
+                "strategy_used": row.PostAnalysis.strategy_used,
+                "comments_included": row.PostAnalysis.comments_included,
+                "comments_preprocessed": row.PostAnalysis.comments_preprocessed,
+                "executive_summary": row.PostAnalysis.executive_summary,
+                "sentiment_breakdown": row.PostAnalysis.sentiment_breakdown,
+                "key_arguments": row.PostAnalysis.key_arguments,
+                "thread_quality_score": row.PostAnalysis.thread_quality_score,
+                "notable_quotes": row.PostAnalysis.notable_quotes,
+                "model_used": row.PostAnalysis.model_used,
+                "tokens_used": row.PostAnalysis.tokens_used,
+                "processing_time_seconds": row.PostAnalysis.processing_time_seconds,
+                "cost_estimate": row.PostAnalysis.cost_estimate,
+                "created_at": row.PostAnalysis.created_at.isoformat()
+            }
+            for row in rows
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.get("/analyses/aggregate")
+async def get_aggregated_analysis(
+    stock: str = Query(..., description="Stock symbol to aggregate analyses for"),
+    use_ai_synthesis: bool = Query(False, description="Use AI to synthesize insights (costs ~$0.01-0.03)"),
+    user_id: Optional[str] = Query(None, description="User ID for API key lookup (required if use_ai_synthesis=True)"),
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of analyses to aggregate"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Aggregate multiple AI analyses for a stock into a single consolidated view.
+
+    Returns weighted sentiment, confidence score, key themes, and overall take.
+    Optionally uses AI synthesis for deeper insights.
+    """
+    from shared.ai_analysis import aggregate_analyses, get_user_api_key, get_openai_client
+
+    # Fetch analyses for the stock
+    stmt = (
+        select(PostAnalysis, RedditPost)
+        .join(RedditPost, PostAnalysis.post_id == RedditPost.id)
+        .where(PostAnalysis.stock_symbol == stock.upper())
+        .order_by(desc(PostAnalysis.created_at))
+        .limit(limit)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No analyses found for stock {stock.upper()}"
+        )
+
+    # Convert to dict format for aggregate function
+    analyses = [
+        {
+            "id": row.PostAnalysis.id,
+            "post_id": row.PostAnalysis.post_id,
+            "post_title": row.RedditPost.title,
+            "subreddit": row.RedditPost.subreddit,
+            "stock_symbol": row.PostAnalysis.stock_symbol,
+            "strategy_used": row.PostAnalysis.strategy_used,
+            "comments_included": row.PostAnalysis.comments_included,
+            "executive_summary": row.PostAnalysis.executive_summary,
+            "sentiment_breakdown": row.PostAnalysis.sentiment_breakdown,
+            "key_arguments": row.PostAnalysis.key_arguments,
+            "thread_quality_score": row.PostAnalysis.thread_quality_score,
+            "notable_quotes": row.PostAnalysis.notable_quotes,
+            "created_at": row.PostAnalysis.created_at.isoformat()
+        }
+        for row in rows
+    ]
+
+    # Get OpenAI client if AI synthesis requested
+    client = None
+    if use_ai_synthesis:
+        if not user_id:
+            raise HTTPException(
+                status_code=400,
+                detail="user_id is required when use_ai_synthesis=True"
+            )
+        try:
+            user_api_key = await get_user_api_key(db, user_id)
+            client = get_openai_client(user_api_key)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    # Aggregate analyses
+    try:
+        aggregated = aggregate_analyses(
+            analyses,
+            use_ai_synthesis=use_ai_synthesis,
+            client=client
+        )
+        return aggregated
+    except Exception as e:
+        import traceback
+        print(f"ERROR in aggregate_analyses: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))

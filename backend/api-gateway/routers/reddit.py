@@ -851,3 +851,28 @@ async def get_tracked_posts(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch tracked posts: {str(e)}")
+
+
+@router.get("/stats")
+async def get_reddit_stats(db: AsyncSession = Depends(get_db)):
+    """Get overall Reddit tracking statistics."""
+    try:
+        # Get total posts count
+        total_posts_result = await db.execute(
+            text("SELECT COUNT(*) FROM reddit_posts")
+        )
+        total_posts = total_posts_result.scalar()
+
+        # Get tracked posts count (posts where track_comments = true)
+        tracked_posts_result = await db.execute(
+            text("SELECT COUNT(*) FROM reddit_posts WHERE track_comments = true")
+        )
+        tracked_posts = tracked_posts_result.scalar()
+
+        return {
+            "total_posts": total_posts or 0,
+            "tracked_posts": tracked_posts or 0
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}")

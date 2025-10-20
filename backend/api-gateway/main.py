@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from config import settings
 from database import init_db
-from routers import auth, stocks, insights, sentiment, research, admin, reddit
+from routers import auth, stocks, insights, sentiment, research, admin, reddit, positions
 from websocket_manager import sio, socket_app
 import socketio
 
@@ -16,8 +16,9 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     print("🚀 Starting Akleao Finance API Gateway...")
-    await init_db()
-    print("✅ Database initialized")
+    # Note: Database tables are managed by Alembic migrations
+    # No need to initialize on startup
+    print("✅ API Gateway initialized")
 
     yield
 
@@ -49,6 +50,7 @@ app.include_router(sentiment.router, prefix="/api/sentiment", tags=["Sentiment"]
 app.include_router(research.router, tags=["Research"])  # prefix already defined in router
 app.include_router(admin.router, tags=["Admin"])
 app.include_router(reddit.router, tags=["Reddit"])  # prefix already defined in router
+app.include_router(positions.router, tags=["Positions"])  # prefix already defined in router
 
 
 @app.get("/")

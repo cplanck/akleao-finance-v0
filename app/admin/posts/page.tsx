@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -117,6 +117,27 @@ function PostsPageContent() {
     setSelectedPost(post);
     setDialogOpen(true);
   };
+
+  // Check for post query parameter and open modal if present
+  useEffect(() => {
+    const postId = searchParams.get("post");
+    if (postId && data?.posts) {
+      const post = data.posts.find(p => p.id === postId);
+      if (post) {
+        setSelectedPost(post);
+        setDialogOpen(true);
+      } else {
+        // Post not in current filtered results, fetch it directly
+        fetch(`${API_URL}/api/admin/reddit-posts/${postId}`)
+          .then(res => res.json())
+          .then(post => {
+            setSelectedPost(post);
+            setDialogOpen(true);
+          })
+          .catch(err => console.error("Failed to fetch post:", err));
+      }
+    }
+  }, [searchParams, data]);
 
   // Server-side filtering is now handling tracked posts
   const filteredPosts = data?.posts || [];

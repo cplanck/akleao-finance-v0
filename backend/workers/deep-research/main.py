@@ -60,13 +60,13 @@ def get_user_api_key(db: Session, user_id: str) -> str:
 
 # Section markers for parsing
 SECTION_MARKERS = {
-    "overview": "## 1. World Context",  # Changed to World Context
-    "financials": "## 2. The Macro Thesis",  # Repurposed for Macro Thesis
-    "sentiment": "## 6. Research Process",  # Repurposed for Research Process
-    "risks": "## 4. What Could Go Wrong",
-    "opportunities": "## 3. Catalysts & Opportunities",
-    "recommendation": "## 5. The Verdict",
-    "references": "## 7. Sources"
+    "overview": "## 1. What This Company Actually Does",  # New: Company overview + recent momentum
+    "financials": "## 2. World Context & Competitive Position",  # Industry context + competitive position
+    "opportunities": "## 3. The Macro Thesis",  # Macro thesis (repurposed from opportunities)
+    "risks": "## 4. What Could Go Wrong",  # Risks
+    "recommendation": "## 5. The Verdict",  # Final verdict
+    "sentiment": "## 6. Research Process",  # Research transparency (repurposed from sentiment)
+    "references": "## 7. Sources"  # All sources
 }
 
 
@@ -174,69 +174,45 @@ def generate_research_report(report: ResearchReport, db: Session):
         full_report = ""
         last_percentage = 0
 
-        # Using OpenAI's experimental web search API
-        # This uses the newer responses.create API with web_search tool
+        # Using GPT-4o with built-in web search (gpt-4o-search-preview)
+        # This specialized model has web search capabilities without needing org verification
         try:
-            response = client.responses.create(
-                model="gpt-4o",
-                tools=[{"type": "web_search"}],
-                input=messages,
+            response = client.chat.completions.create(
+                model="gpt-4o-search-preview",
+                messages=messages,
                 stream=True,
-                # Optional: Configure web search parameters
-                extra_body={
-                    "web": {
-                        "recency_days": 180,  # Focus on last 6 months
-                        "max_results": 50,
-                        "domain_filter": [
-                            "sec.gov",
-                            "reuters.com",
-                            "seekingalpha.com",
-                            "barrons.com",
-                            "marketwatch.com",
-                            "cnbc.com",
-                            "investorplace.com",
-                            "fool.com",
-                            "bloomberg.com",
-                            "wsj.com",
-                            "finance.yahoo.com",
-                            "morningstar.com",
-                            "investors.com"
-                        ]
-                    }
-                }
+                max_completion_tokens=4000
             )
 
             for chunk in response:
-                # Handle different chunk types from responses API
-                if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'content'):
-                    content = chunk.delta.content
-                    if content:
-                        full_report += content
+                # Handle Chat Completions streaming
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_report += content
 
-                        # Estimate progress based on content length
-                        estimated_percentage = min(int((len(full_report) / 3500) * 90), 90)
+                    # Estimate progress based on content length
+                    estimated_percentage = min(int((len(full_report) / 3500) * 90), 90)
 
-                        if estimated_percentage > last_percentage:
-                            last_percentage = estimated_percentage
-                            report.progress_percentage = estimated_percentage
-                            db.commit()
+                    if estimated_percentage > last_percentage:
+                        last_percentage = estimated_percentage
+                        report.progress_percentage = estimated_percentage
+                        db.commit()
 
-                            publish_research_update(report.id, {
-                                "type": "progress",
-                                "message": "Generating report...",
-                                "percentage": estimated_percentage,
-                                "content_preview": full_report[:500]
-                            })
+                        publish_research_update(report.id, {
+                            "type": "progress",
+                            "message": "Generating report with web search...",
+                            "percentage": estimated_percentage,
+                            "content_preview": full_report[:500]
+                        })
 
         except (AttributeError, TypeError, Exception) as e:
-            # Fallback to standard chat completion if responses API not available
-            print(f"Web search API not available ({type(e).__name__}: {str(e)}), falling back to standard completion")
+            # Fallback to mini search model if primary fails
+            print(f"Primary search model failed ({type(e).__name__}: {str(e)}), falling back to gpt-4o-mini-search")
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini-search-preview",
                 messages=messages,
                 stream=True,
-                temperature=0.7,
-                max_tokens=4000
+                max_completion_tokens=4000
             )
 
             for chunk in response:
@@ -253,7 +229,7 @@ def generate_research_report(report: ResearchReport, db: Session):
 
                         publish_research_update(report.id, {
                             "type": "progress",
-                            "message": "Generating report...",
+                            "message": "Generating report (fallback - no web search)...",
                             "percentage": estimated_percentage,
                             "content_preview": full_report[:500]
                         })

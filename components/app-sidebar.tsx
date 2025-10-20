@@ -9,6 +9,9 @@ import {
   MessageSquareIcon,
   TrendingUpIcon,
   BrainCircuitIcon,
+  SparklesIcon,
+  SearchIcon,
+  LineChartIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { usePathname } from "next/navigation"
@@ -31,9 +34,19 @@ import {
 const data = {
   navMain: [
     {
-      title: "Dashboard",
+      title: "Home",
       url: "/",
       icon: LayoutDashboardIcon,
+    },
+    {
+      title: "Research",
+      url: "/research",
+      icon: SearchIcon,
+    },
+    {
+      title: "Simulations",
+      url: "/simulations",
+      icon: LineChartIcon,
     },
     {
       title: "Admin",
@@ -66,6 +79,11 @@ const data = {
       title: "ML Models",
       url: "/admin/ml",
       icon: BrainCircuitIcon,
+    },
+    {
+      title: "AI Analyses",
+      url: "/admin/ai-analyses",
+      icon: SparklesIcon,
     },
   ],
 }
