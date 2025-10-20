@@ -1,23 +1,24 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: akleao-postgres
-    environment:
-      POSTGRES_USER: akleao
-      POSTGRES_PASSWORD: akleao_dev_password
-      POSTGRES_DB: akleao
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U akleao"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # PostgreSQL Database - DISABLED: Using production Cloud SQL instead
+  # Uncomment this if you want to use a local database for development
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: akleao-postgres
+  #   environment:
+  #     POSTGRES_USER: akleao
+  #     POSTGRES_PASSWORD: akleao_dev_password
+  #     POSTGRES_DB: akleao
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U akleao"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   # Redis Cache
   redis:
@@ -42,7 +43,7 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - DATABASE_URL=postgresql://akleao:YTmLuVfpJPuTwYiG%2FFaLUFoY5me1TYyY1UAlc7TvGUw%3D@34.44.5.181:5432/akleao
       - REDIS_URL=redis://redis:6379
       - ENV=development
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production-12345678}
@@ -53,8 +54,6 @@ services:
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-AkleaoFinance/1.0}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -69,12 +68,10 @@ services:
       dockerfile: Dockerfile
     container_name: akleao-reddit-scheduler
     environment:
-      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - DATABASE_URL=postgresql://akleao:YTmLuVfpJPuTwYiG%2FFaLUFoY5me1TYyY1UAlc7TvGUw%3D@34.44.5.181:5432/akleao
       - REDIS_URL=redis://redis:6379
       - SCRAPE_INTERVAL_MINUTES=${SCRAPE_INTERVAL_MINUTES:-15}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -89,15 +86,13 @@ services:
       context: ./workers/reddit-scraper
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - DATABASE_URL=postgresql://akleao:YTmLuVfpJPuTwYiG%2FFaLUFoY5me1TYyY1UAlc7TvGUw%3D@34.44.5.181:5432/akleao
       - REDIS_URL=redis://redis:6379
       - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-AkleaoFinance/1.0}
       - POLL_INTERVAL_SECONDS=${SCRAPER_POLL_INTERVAL_SECONDS:-5}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -115,14 +110,12 @@ services:
       dockerfile: Dockerfile
     container_name: akleao-comment-scraper
     environment:
-      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - DATABASE_URL=postgresql://akleao:YTmLuVfpJPuTwYiG%2FFaLUFoY5me1TYyY1UAlc7TvGUw%3D@34.44.5.181:5432/akleao
       - REDIS_URL=redis://redis:6379
       - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-AkleaoFinance/1.0}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -136,13 +129,11 @@ services:
       context: ./workers/deep-research
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+      - DATABASE_URL=postgresql://akleao:YTmLuVfpJPuTwYiG%2FFaLUFoY5me1TYyY1UAlc7TvGUw%3D@34.44.5.181:5432/akleao
       - REDIS_URL=redis://redis:6379
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - POLL_INTERVAL_SECONDS=${RESEARCH_POLL_INTERVAL_SECONDS:-5}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:

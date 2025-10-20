@@ -8,11 +8,15 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
+# Copy requirements and install
+COPY workers/comment-scraper/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy shared models
+COPY shared ./shared
 
-CMD ["python", "-u", "main.py"]
+# Copy application code
+COPY workers/comment-scraper .
+
+# Run with HTTP health check server for Cloud Run
+CMD ["python", "-u", "server.py"]

@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: akleao-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Reddit Scraper Scheduler - Creates jobs every 15 minutes
+  reddit-scheduler:
+    image: gcr.io/akleao-finance-v0/reddit-scraper:latest
+    container_name: akleao-reddit-scheduler
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - SCRAPE_INTERVAL_MINUTES=15
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: python scheduler.py
+    restart: unless-stopped
+
+  # Reddit Scraper Worker - Processes jobs from the queue
+  reddit-scraper:
+    image: gcr.io/akleao-finance-v0/reddit-scraper:latest
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
+      - REDDIT_USER_AGENT=${REDDIT_USER_AGENT}
+      - POLL_INTERVAL_SECONDS=5
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: python -u main_job_based.py
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # Run 2 concurrent workers
+
+  # API Gateway - FastAPI backend for frontend
+  api-gateway:
+    image: gcr.io/akleao-finance-v0/akleao-api:latest
+    container_name: akleao-api-gateway
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    ports:
+      - "8001:8001"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Comment Scraper - Continuously rescapes comments for tracked posts
+  comment-scraper:
+    image: gcr.io/akleao-finance-v0/comment-scraper:latest
+    container_name: akleao-comment-scraper
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
+      - REDDIT_USER_AGENT=${REDDIT_USER_AGENT}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Deep Research Worker - Multiple instances for concurrent processing
+  deep-research:
+    image: gcr.io/akleao-finance-v0/deep-research:latest
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - POLL_INTERVAL_SECONDS=5
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: 3  # Run 3 concurrent workers
+
+volumes:
+  redis_data:
+
+networks:
+  default:
+    name: akleao-network

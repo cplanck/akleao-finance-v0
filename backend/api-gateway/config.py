@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "https://yourdomain.com"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "https://akleao-finance-v0.vercel.app"
+    ]
 
     # JWT Authentication
     JWT_SECRET_KEY: str = "your-secret-key-change-in-production"

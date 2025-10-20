@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from config import settings
 from database import init_db
-from routers import auth, stocks, insights, sentiment, research, admin, reddit, positions
+from routers import auth, stocks, insights, sentiment, research, admin, reddit, positions, pinned_stocks, openai_keys
 from websocket_manager import sio, socket_app
 import socketio
 
@@ -51,6 +51,8 @@ app.include_router(research.router, tags=["Research"])  # prefix already defined
 app.include_router(admin.router, tags=["Admin"])
 app.include_router(reddit.router, tags=["Reddit"])  # prefix already defined in router
 app.include_router(positions.router, tags=["Positions"])  # prefix already defined in router
+app.include_router(pinned_stocks.router, prefix="/api", tags=["Pinned Stocks"])
+app.include_router(openai_keys.router, prefix="/api", tags=["OpenAI Keys"])
 
 
 @app.get("/")

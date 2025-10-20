@@ -43,25 +43,29 @@ def extract_stock_tickers(text: str) -> list[str]:
     return list(set(tickers))  # Remove duplicates
 
 
-def rescrape_post_comments(reddit: praw.Reddit, post: RedditPost, db: Session, redis_client: redis.Redis) -> int:
+def rescrape_post_comments(reddit: praw.Reddit, post: RedditPost, db: Session, redis_client: redis.Redis | None) -> int:
     """Rescrape comments for a tracked post."""
     try:
         # Get current comment count before scraping
         existing_comments = post.num_comments
 
-        # Store current post in Redis for real-time tracking
-        redis_client.setex(
-            "comment_scraper:current_post",
-            10,  # Expire after 10 seconds
-            json.dumps({
-                "post_id": post.id,
-                "subreddit": post.subreddit,
-                "title": post.title[:100],  # Truncate title
-                "existing_comments": existing_comments,
-                "new_comments": 0,  # Will update after scraping
-                "started_at": datetime.utcnow().isoformat()
-            })
-        )
+        # Store current post in Redis for real-time tracking (if available)
+        if redis_client:
+            try:
+                redis_client.setex(
+                    "comment_scraper:current_post",
+                    10,  # Expire after 10 seconds
+                    json.dumps({
+                        "post_id": post.id,
+                        "subreddit": post.subreddit,
+                        "title": post.title[:100],  # Truncate title
+                        "existing_comments": existing_comments,
+                        "new_comments": 0,  # Will update after scraping
+                        "started_at": datetime.utcnow().isoformat()
+                    })
+                )
+            except:
+                pass  # Redis is optional
 
         print(f"📝 Rescaping comments for post: {post.id} (r/{post.subreddit})")
 
@@ -145,19 +149,23 @@ def rescrape_post_comments(reddit: praw.Reddit, post: RedditPost, db: Session, r
         comment_growth = post.num_comments - old_comment_count
         print(f"   ✅ Scraped {new_comments_count} new comments (growth: +{comment_growth})")
 
-        # Update Redis with final stats
-        redis_client.setex(
-            "comment_scraper:current_post",
-            10,  # Keep visible for 10 seconds
-            json.dumps({
-                "post_id": post.id,
-                "subreddit": post.subreddit,
-                "title": post.title[:100],
-                "existing_comments": existing_comments,
-                "new_comments": new_comments_count,
-                "started_at": datetime.utcnow().isoformat()
-            })
-        )
+        # Update Redis with final stats (if available)
+        if redis_client:
+            try:
+                redis_client.setex(
+                    "comment_scraper:current_post",
+                    10,  # Keep visible for 10 seconds
+                    json.dumps({
+                        "post_id": post.id,
+                        "subreddit": post.subreddit,
+                        "title": post.title[:100],
+                        "existing_comments": existing_comments,
+                        "new_comments": new_comments_count,
+                        "started_at": datetime.utcnow().isoformat()
+                    })
+                )
+            except:
+                pass  # Redis is optional
 
         return new_comments_count
 
@@ -235,9 +243,14 @@ def main():
     engine = create_engine(DATABASE_URL)
     db = Session(engine)
 
-    # Initialize Redis connection
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-    print("✅ Connected to Redis")
+    # Initialize Redis connection (optional - for real-time monitoring only)
+    redis_client = None
+    try:
+        redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+        redis_client.ping()  # Test connection
+        print("✅ Connected to Redis")
+    except Exception as e:
+        print(f"⚠️  Redis not available (monitoring disabled): {e}")
 
     print("✅ Comment scraper ready - continuous monitoring mode active!")
 
@@ -274,8 +287,12 @@ def main():
                 print(f"\n✨ Completed loop - {current_run.posts_collected} posts, {current_run.comments_collected} comments")
                 print(f"🔄 Starting next loop through tracked posts...\n")
 
-                # Clear current post from Redis
-                redis_client.delete("comment_scraper:current_post")
+                # Clear current post from Redis (if available)
+                if redis_client:
+                    try:
+                        redis_client.delete("comment_scraper:current_post")
+                    except:
+                        pass  # Redis is optional
 
             else:
                 # No tracked posts - complete current run if exists
@@ -298,10 +315,19 @@ def main():
 
         except Exception as e:
             print(f"❌ Error in comment scraper loop: {e}")
-            if current_run:
-                current_run.errors_count += 1
-                db.commit()
-            time.sleep(SCAN_INTERVAL_SECONDS)
+            # Rollback any failed transaction
+            db.rollback()
+            # Reset current_run if we hit a database error
+            if "duplicate key" in str(e).lower() or "rollback" in str(e).lower():
+                current_run = None
+                posts_processed_in_run = 0
+            elif current_run:
+                try:
+                    current_run.errors_count += 1
+                    db.commit()
+                except:
+                    db.rollback()
+            time.sleep(IDLE_SLEEP_SECONDS)
 
 
 if __name__ == "__main__":
