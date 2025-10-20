@@ -13,8 +13,9 @@ import { MessageSquare, ArrowUp, ExternalLink, TrendingUp, Eye, Clock, Sparkles,
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AIOverview } from "@/components/ai-overview";
 import { formatTimeAgo } from "@/lib/date-utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -344,7 +345,68 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
               {analysesData?.analyses && analysesData.analyses.length > 0 ? (
                 <div className="space-y-6">
                   {analysesData.analyses.map((analysis) => (
-                    <AIOverview key={analysis.id} analysis={analysis} />
+                    <Card key={analysis.id}>
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                          <span>Analysis Summary</span>
+                          {analysis.stock_symbol && (
+                            <Badge variant="default">${analysis.stock_symbol}</Badge>
+                          )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* Executive Summary */}
+                        <div>
+                          <h3 className="font-semibold mb-2">Executive Summary</h3>
+                          <p className="text-sm text-muted-foreground">{analysis.executive_summary}</p>
+                        </div>
+
+                        {/* Sentiment Breakdown */}
+                        <div>
+                          <h3 className="font-semibold mb-2">Sentiment</h3>
+                          <div className="flex gap-2">
+                            <Badge variant="default" className="flex items-center gap-1">
+                              <TrendingUp className="h-3 w-3" />
+                              Bullish: {analysis.sentiment_breakdown.bullish}%
+                            </Badge>
+                            <Badge variant="destructive" className="flex items-center gap-1">
+                              <TrendingDown className="h-3 w-3" />
+                              Bearish: {analysis.sentiment_breakdown.bearish}%
+                            </Badge>
+                            <Badge variant="secondary" className="flex items-center gap-1">
+                              <Minus className="h-3 w-3" />
+                              Neutral: {analysis.sentiment_breakdown.neutral}%
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Key Arguments */}
+                        {analysis.key_arguments && analysis.key_arguments.length > 0 && (
+                          <div>
+                            <h3 className="font-semibold mb-2">Key Arguments</h3>
+                            <div className="space-y-2">
+                              {analysis.key_arguments.map((arg, idx) => (
+                                <div key={idx} className="border-l-2 pl-3 py-1" style={{
+                                  borderColor: arg.type === "bull" ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"
+                                }}>
+                                  <p className="text-sm font-medium">{arg.summary}</p>
+                                  <p className="text-xs text-muted-foreground italic">"{arg.quote}"</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Metadata */}
+                        <div className="text-xs text-muted-foreground pt-2 border-t">
+                          <div className="flex gap-4">
+                            <span>Quality Score: {analysis.thread_quality_score}/100</span>
+                            <span>Comments: {analysis.comments_included}</span>
+                            <span>Model: {analysis.model_used}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
               ) : (
