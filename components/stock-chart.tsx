@@ -197,7 +197,7 @@ export default function StockChart({
               tickLine={false}
               axisLine={false}
               tickMargin={12}
-              ticks={getTicksToShow().map(i => data?.[i]?.date).filter(Boolean)}
+              ticks={getTicksToShow().map(i => data?.[i]?.date).filter((d): d is string => d !== undefined)}
               tickFormatter={(value) => {
                 // For 1D: show time as is (e.g., "10:30 AM")
                 if (timeRange === "1D") {

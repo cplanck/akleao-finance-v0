@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +37,7 @@ function getTimeAgo(date: Date): string {
   return `${days}d ago`;
 }
 
-export default function Home() {
+function ResearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -440,5 +440,13 @@ function SimulatePositionDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <ResearchContent />
+    </Suspense>
   );
 }
