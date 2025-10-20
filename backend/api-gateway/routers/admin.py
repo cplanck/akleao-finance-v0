@@ -45,6 +45,64 @@ def parse_mentioned_stocks(mentioned_stocks):
             return []
 
 
+def calculate_heat_score(post: RedditPost, now: datetime) -> dict:
+    """Calculate heat score for a post based on recency and engagement.
+
+    Returns dict with heat score components for debugging/analysis.
+    """
+    import math
+
+    # Calculate hours since post was posted on Reddit
+    hours_since_posted = (now - post.posted_at).total_seconds() / 3600
+
+    # Recency score: posts <4 hours are treated as equally "new"
+    # After 4 hours, recency starts to decay exponentially
+    if hours_since_posted < 4:
+        recency_score = 100  # All posts <4 hours get max recency score
+    else:
+        # Posts lose 50% of recency value every 6 hours after the 4-hour mark
+        hours_past_threshold = hours_since_posted - 4
+        recency_score = math.exp(-hours_past_threshold / 6) * 100
+
+    # Engagement score: combination of score and comments
+    # Scale to give good posts (10-100 upvotes, 5-50 comments) meaningful scores
+    # But cap viral posts (500+ upvotes) to prevent them from dominating old content
+    normalized_score = min(post.score / 20, 10) * 6  # Max 60 points from score (caps at 200 upvotes)
+    normalized_comments = min(post.num_comments / 10, 10) * 4  # Max 40 points from comments (caps at 100 comments)
+    engagement_score = normalized_score + normalized_comments  # Max 100 points total
+
+    # Stock mention bonus: posts with stock tickers are more relevant
+    # Parse mentioned_stocks if it's a string
+    mentioned_stocks = []
+    if post.mentioned_stocks:
+        if isinstance(post.mentioned_stocks, str):
+            try:
+                mentioned_stocks = json.loads(post.mentioned_stocks)
+            except:
+                mentioned_stocks = []
+        elif isinstance(post.mentioned_stocks, list):
+            mentioned_stocks = post.mentioned_stocks
+
+    # Bonus: +5 points if any stocks mentioned, +5 more if primary stock identified (max +10)
+    stock_bonus = 0
+    if mentioned_stocks:
+        stock_bonus = 5
+        if post.primary_stock:
+            stock_bonus += 5
+
+    # Combined heat: 60% recency, 40% engagement, plus stock bonus
+    # This balances fresh content with high-engagement posts (sweet spot for <8 hour posts with good engagement)
+    heat = (recency_score * 0.60) + (engagement_score * 0.40) + stock_bonus
+
+    return {
+        "heat": heat,
+        "recency_score": recency_score,
+        "engagement_score": engagement_score,
+        "stock_bonus": stock_bonus,
+        "hours_since_posted": hours_since_posted,
+    }
+
+
 @router.get("/reddit-posts")
 async def get_reddit_posts(
     subreddit: Optional[str] = None,
@@ -52,9 +110,14 @@ async def get_reddit_posts(
     tracked_only: bool = False,
     limit: int = Query(50, le=10000),  # Allow fetching all posts
     offset: int = Query(0, ge=0),
+    sort_by: str = Query("heat", regex="^(heat|posted_at)$"),  # heat or posted_at
     db: AsyncSession = Depends(get_db),
 ):
-    """Get Reddit posts with optional filters."""
+    """Get Reddit posts with optional filters.
+
+    Args:
+        sort_by: Sort order - "heat" (default) for engagement+recency score, "posted_at" for chronological
+    """
     from datetime import datetime as dt
 
     # Build query
@@ -76,42 +139,172 @@ async def get_reddit_posts(
     total_result = await db.execute(count_stmt)
     total = total_result.scalar()
 
-    # Get paginated results
-    # Order by: tracked posts first (track_comments DESC), then by posted_at DESC (newest posts first)
-    stmt = stmt.order_by(
-        desc(RedditPost.track_comments),
-        desc(RedditPost.posted_at)
-    ).offset(offset).limit(limit)
-    result = await db.execute(stmt)
-    posts = result.scalars().all()
+    # For heat sorting, we need to fetch more posts than requested, calculate heat scores,
+    # sort in Python, then apply limit/offset
+    if sort_by == "heat":
+        # Fetch recent posts (last 24 hours worth to keep it reasonable)
+        stmt = stmt.where(
+            RedditPost.posted_at > dt.utcnow() - timedelta(hours=24)
+        ).order_by(desc(RedditPost.posted_at))
+        result = await db.execute(stmt)
+        posts = result.scalars().all()
+
+        # Filter out low-quality posts (posts with <2 upvotes AND <2 comments)
+        # This ensures we only show posts that have meaningful engagement
+        quality_posts = [
+            post for post in posts
+            if post.score >= 2 or post.num_comments >= 2
+        ]
+
+        # Calculate heat scores
+        now = dt.utcnow()
+        posts_with_heat = []
+        for post in quality_posts:
+            heat_data = calculate_heat_score(post, now)
+            posts_with_heat.append({
+                "post": post,
+                "heat": heat_data["heat"],
+                "recency_score": heat_data["recency_score"],
+                "engagement_score": heat_data["engagement_score"],
+                "stock_bonus": heat_data["stock_bonus"],
+            })
+
+        # Sort by heat score (highest first)
+        posts_with_heat.sort(key=lambda x: x["heat"], reverse=True)
+
+        # Apply pagination
+        paginated_posts = posts_with_heat[offset:offset + limit]
+
+    else:
+        # Simple chronological sort
+        stmt = stmt.order_by(
+            desc(RedditPost.posted_at)
+        ).offset(offset).limit(limit)
+        result = await db.execute(stmt)
+        posts = result.scalars().all()
+
+        # Wrap in same format for consistent output
+        paginated_posts = [{"post": post, "heat": None, "recency_score": None, "engagement_score": None, "stock_bonus": None} for post in posts]
 
     return {
         "posts": [
             {
-                "id": post.id,
-                "subreddit": post.subreddit,
-                "title": post.title,
-                "content": post.content,
-                "author": post.author,
-                "url": post.url,
-                "score": post.score,
-                "num_comments": post.num_comments,
-                "initial_num_comments": post.initial_num_comments,
-                "mentioned_stocks": json.loads(post.mentioned_stocks) if post.mentioned_stocks else [],
-                "primary_stock": post.primary_stock,
-                "posted_at": post.posted_at.isoformat(),  # When posted on Reddit
-                "created_at": post.created_at.isoformat(),  # When we first indexed it
-                "track_comments": post.track_comments,
-                "track_until": post.track_until.isoformat() if post.track_until else None,
-                "last_comment_scrape_at": post.last_comment_scrape_at.isoformat() if post.last_comment_scrape_at else None,
-                "comment_scrape_count": post.comment_scrape_count,
+                "id": item["post"].id,
+                "subreddit": item["post"].subreddit,
+                "title": item["post"].title,
+                "content": item["post"].content,
+                "author": item["post"].author,
+                "url": item["post"].url,
+                "score": item["post"].score,
+                "num_comments": item["post"].num_comments,
+                "initial_num_comments": item["post"].initial_num_comments,
+                "mentioned_stocks": json.loads(item["post"].mentioned_stocks) if item["post"].mentioned_stocks else [],
+                "primary_stock": item["post"].primary_stock,
+                "posted_at": item["post"].posted_at.isoformat(),  # When posted on Reddit
+                "created_at": item["post"].created_at.isoformat(),  # When we first indexed it
+                "track_comments": item["post"].track_comments,
+                "track_until": item["post"].track_until.isoformat() if item["post"].track_until else None,
+                "last_comment_scrape_at": item["post"].last_comment_scrape_at.isoformat() if item["post"].last_comment_scrape_at else None,
+                "comment_scrape_count": item["post"].comment_scrape_count,
+                # Include heat score data for debugging/analysis
+                "heat": item["heat"],
+                "recency_score": item["recency_score"],
+                "engagement_score": item["engagement_score"],
+                "stock_bonus": item["stock_bonus"],
             }
-            for post in posts
+            for item in paginated_posts
         ],
         "total": total,
         "limit": limit,
         "offset": offset,
     }
+
+
+@router.get("/reddit-posts/{post_id}")
+async def get_single_post(
+    post_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single Reddit post by ID."""
+    stmt = select(RedditPost).where(RedditPost.id == post_id)
+    result = await db.execute(stmt)
+    post = result.scalar_one_or_none()
+
+    if not post:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    return {
+        "id": post.id,
+        "subreddit": post.subreddit,
+        "title": post.title,
+        "content": post.content,
+        "author": post.author,
+        "url": post.url,
+        "score": post.score,
+        "num_comments": post.num_comments,
+        "initial_num_comments": post.initial_num_comments,
+        "mentioned_stocks": json.loads(post.mentioned_stocks) if post.mentioned_stocks else [],
+        "primary_stock": post.primary_stock,
+        "posted_at": post.posted_at.isoformat(),
+        "created_at": post.created_at.isoformat(),
+        "track_comments": post.track_comments,
+        "track_until": post.track_until.isoformat() if post.track_until else None,
+        "last_comment_scrape_at": post.last_comment_scrape_at.isoformat() if post.last_comment_scrape_at else None,
+        "comment_scrape_count": post.comment_scrape_count,
+    }
+
+
+@router.get("/reddit-posts/{post_id}/comments")
+async def get_post_comments(
+    post_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get comments for a specific Reddit post."""
+    # First check if post exists
+    post_stmt = select(RedditPost).where(RedditPost.id == post_id)
+    post_result = await db.execute(post_stmt)
+    post = post_result.scalar_one_or_none()
+
+    if not post:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    # Fetch all comments for this post
+    stmt = select(RedditComment).where(RedditComment.post_id == post_id).order_by(RedditComment.created_at)
+    result = await db.execute(stmt)
+    comments = result.scalars().all()
+
+    # Build comment tree
+    comment_dict = {}
+    root_comments = []
+
+    for comment in comments:
+        comment_data = {
+            "id": comment.id,
+            "post_id": comment.post_id,
+            "author": comment.author,
+            "content": comment.content,
+            "score": comment.score,
+            "mentioned_stocks": comment.mentioned_stocks,
+            "sentiment_label": comment.sentiment_label,
+            "sentiment_score": comment.sentiment_score,
+            "created_at": comment.created_at.isoformat(),
+            "parent_id": comment.parent_id,
+            "depth": comment.depth,
+            "replies": []
+        }
+        comment_dict[comment.id] = comment_data
+
+        if comment.parent_id is None:
+            root_comments.append(comment_data)
+
+    # Build tree structure
+    for comment in comments:
+        if comment.parent_id and comment.parent_id in comment_dict:
+            comment_dict[comment.parent_id]["replies"].append(comment_dict[comment.id])
+
+    return root_comments
 
 
 @router.get("/stocks")

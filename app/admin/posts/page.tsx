@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { PostsDataTable } from "@/components/posts-data-table";
-import { PostDetailsDialog } from "@/components/post-details-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Command,
@@ -97,8 +96,6 @@ function PostsPageContent() {
   const [subredditFilter, setSubredditFilter] = useState(initialSubreddit);
   const [stockFilter, setStockFilter] = useState(initialStock);
   const [showTrackedOnly, setShowTrackedOnly] = useState(false);
-  const [selectedPost, setSelectedPost] = useState<RedditPost | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [subredditOpen, setSubredditOpen] = useState(false);
 
   const { data: subredditsData } = useQuery({
@@ -112,32 +109,6 @@ function PostsPageContent() {
   });
 
   const activeSubreddits = subredditsData?.filter(sub => sub.is_active) || [];
-
-  const handleRowClick = (post: RedditPost) => {
-    setSelectedPost(post);
-    setDialogOpen(true);
-  };
-
-  // Check for post query parameter and open modal if present
-  useEffect(() => {
-    const postId = searchParams.get("post");
-    if (postId && data?.posts) {
-      const post = data.posts.find(p => p.id === postId);
-      if (post) {
-        setSelectedPost(post);
-        setDialogOpen(true);
-      } else {
-        // Post not in current filtered results, fetch it directly
-        fetch(`${API_URL}/api/admin/reddit-posts/${postId}`)
-          .then(res => res.json())
-          .then(post => {
-            setSelectedPost(post);
-            setDialogOpen(true);
-          })
-          .catch(err => console.error("Failed to fetch post:", err));
-      }
-    }
-  }, [searchParams, data]);
 
   // Server-side filtering is now handling tracked posts
   const filteredPosts = data?.posts || [];
@@ -260,7 +231,7 @@ function PostsPageContent() {
               ))}
             </div>
           ) : filteredPosts.length > 0 ? (
-            <PostsDataTable data={filteredPosts} onRowClick={handleRowClick} />
+            <PostsDataTable data={filteredPosts} />
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               {showTrackedOnly
@@ -270,13 +241,6 @@ function PostsPageContent() {
           )}
         </CardContent>
       </Card>
-
-      {/* Post Details Dialog */}
-      <PostDetailsDialog
-        post={selectedPost}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-      />
     </div>
   );
 }

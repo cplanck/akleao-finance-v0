@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -55,7 +56,6 @@ interface RedditPost {
 
 interface PostsDataTableProps {
   data: RedditPost[];
-  onRowClick?: (post: RedditPost) => void;
 }
 
 function formatTimeAgo(dateString: string | null): string {
@@ -89,7 +89,7 @@ function formatTimeAgo(dateString: string | null): string {
   return `${years}y ago`;
 }
 
-export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
+export function PostsDataTable({ data }: PostsDataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -340,7 +340,7 @@ export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
         />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto">
+            <Button variant="outline" className="ml-auto hidden md:flex">
               Columns <ChevronDown className="ml-2 h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -365,7 +365,67 @@ export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="rounded-md border">
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {table.getRowModel().rows?.length ? (
+          table.getRowModel().rows.map((row) => {
+            const post = row.original;
+            const trackUntilUTC = post.track_until?.endsWith('Z') ? post.track_until : `${post.track_until}Z`;
+            const isTracking = post.track_comments && post.track_until && new Date(trackUntilUTC) > new Date();
+            const commentGrowth = post.num_comments - post.initial_num_comments;
+            const hasNewComments = commentGrowth > 0;
+
+            return (
+              <Link key={row.id} href={`/posts/${post.id}`}>
+                <div className="border rounded-lg p-4 space-y-3 hover:bg-muted/50 transition-colors">
+                  {/* Title and badges */}
+                  <div className="space-y-2">
+                    <div className="font-medium text-sm leading-tight">{post.title}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="text-xs">r/{post.subreddit}</Badge>
+                      {post.primary_stock && (
+                        <Badge variant="default" className="text-xs font-mono">
+                          ${post.primary_stock}
+                        </Badge>
+                      )}
+                      {isTracking && (
+                        <Badge variant="outline" className="text-xs gap-1 bg-blue-50 text-blue-700 border-blue-200">
+                          <Eye className="h-3 w-3" />
+                          Tracking
+                        </Badge>
+                      )}
+                      {hasNewComments && (
+                        <Badge variant="outline" className="text-xs gap-1 bg-green-50 text-green-700 border-green-200">
+                          <TrendingUp className="h-3 w-3" />
+                          +{commentGrowth}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      {post.num_comments.toLocaleString()}
+                    </div>
+                    <span>•</span>
+                    <span>{formatTimeAgo(post.posted_at)}</span>
+                  </div>
+                </div>
+              </Link>
+            );
+          })
+        ) : (
+          <div className="text-center py-12 text-muted-foreground">
+            No results.
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -392,7 +452,7 @@ export function PostsDataTable({ data, onRowClick }: PostsDataTableProps) {
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => onRowClick?.(row.original)}
+                  onClick={() => window.location.href = `/posts/${row.original.id}`}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>

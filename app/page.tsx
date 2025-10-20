@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
@@ -27,70 +28,63 @@ interface RedditPost {
   posted_at: string;
   created_at: string;
   track_comments: boolean;
-}
-
-interface HeatScore {
-  post: RedditPost;
-  heat: number;
-  recencyScore: number;
-  engagementScore: number;
+  // Heat score data from API (for debugging/display)
+  heat: number | null;
+  recency_score: number | null;
+  engagement_score: number | null;
+  stock_bonus: number | null;
 }
 
 async function fetchRecentPosts(): Promise<RedditPost[]> {
-  const res = await fetch(`${API_URL}/api/admin/reddit-posts?limit=200&offset=0`);
+  // Fetch posts sorted by heat score from the API
+  // Algorithm: heat = 60% recency + 40% engagement + stock bonus
+  // - Recency: Posts <4 hours old get max score (100), then decay exponentially
+  // - Engagement: Capped at 100 points (prevents viral posts from dominating)
+  // - Stock bonus: +5 for mentions, +5 for primary stock (max +10)
+  // - Quality filter: Must have ≥2 upvotes OR ≥2 comments
+  const res = await fetch(`${API_URL}/api/admin/reddit-posts?limit=50&offset=0&sort_by=heat`);
   if (!res.ok) throw new Error("Failed to fetch posts");
   const data = await res.json();
   return data.posts;
 }
 
-function calculateHeatScore(post: RedditPost): HeatScore {
-  // When the post was actually posted on Reddit (posted_at = actual Reddit post time)
-  const hoursSincePosted = getHoursSince(post.posted_at);
-
-  // Recency score: heavily favor recently posted content
-  // Posts lose 50% of recency value every 6 hours (faster decay)
-  const recencyScore = Math.exp(-hoursSincePosted / 6) * 100;
-
-  // Engagement score: combination of score and comments
-  // Normalize by typical values (score weight: 60%, comments: 40%)
-  const normalizedScore = Math.min(post.score / 50, 10) * 6;
-  const normalizedComments = Math.min(post.num_comments / 30, 10) * 4;
-  const engagementScore = (normalizedScore + normalizedComments) * 10;
-
-  // Combined heat: 70% recency of tracking, 30% engagement
-  // This heavily favors new posts that we just started tracking with high engagement
-  const heat = (recencyScore * 0.7) + (engagementScore * 0.3);
-
-  return {
-    post,
-    heat,
-    recencyScore,
-    engagementScore
-  };
-}
-
 export default function HomePage() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const { data: posts, isLoading } = useQuery({
     queryKey: ["recent-posts"],
     queryFn: fetchRecentPosts,
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Calculate heat scores and sort
-  const rankedPosts = posts
-    ? posts
-        .map(calculateHeatScore)
-        .sort((a, b) => b.heat - a.heat)
-        .slice(0, 50) // Top 50 hottest posts
-    : [];
+  // Restore scroll position when returning from post detail page
+  useEffect(() => {
+    const savedScrollPos = sessionStorage.getItem("homeScrollPos");
+    if (savedScrollPos && containerRef.current) {
+      setTimeout(() => {
+        containerRef.current?.scrollTo(0, parseInt(savedScrollPos));
+        sessionStorage.removeItem("homeScrollPos");
+      }, 100);
+    }
+  }, []);
+
+  // Save scroll position before navigating away
+  const handlePostClick = () => {
+    if (containerRef.current) {
+      sessionStorage.setItem("homeScrollPos", containerRef.current.scrollTop.toString());
+    }
+  };
+
+  // Posts are already sorted by heat score from the API
+  // No need for client-side sorting anymore!
 
   return (
     <SidebarProvider>
       <AppSidebar variant="inset" />
       <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-1.5">
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div ref={containerRef} className="@container/main flex flex-1 flex-col gap-1.5 overflow-y-auto">
             <div className="flex flex-col gap-2 py-2 md:gap-3 md:py-3">
               <div className="px-3 lg:px-4 space-y-4">
                 {/* Header */}
@@ -118,7 +112,7 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {rankedPosts.map(({ post, heat, recencyScore, engagementScore }) => {
+                    {posts?.map((post) => {
                       const mentionedStocks = Array.isArray(post.mentioned_stocks)
                         ? post.mentioned_stocks
                         : typeof post.mentioned_stocks === "string"
@@ -128,8 +122,9 @@ export default function HomePage() {
                       return (
                         <Link
                           key={post.id}
-                          href={`/admin/posts?post=${post.id}`}
+                          href={`/posts/${post.id}`}
                           className="block group"
+                          onClick={handlePostClick}
                         >
                           <Card className="p-4 hover:shadow-lg hover:border-primary/30 transition-all duration-300 cursor-pointer">
                             <div className="space-y-3">
