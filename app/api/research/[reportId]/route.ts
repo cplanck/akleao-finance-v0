@@ -6,9 +6,12 @@ const API_GATEWAY_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:800
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { reportId: string } }
+  { params }: { params: Promise<{ reportId: string }> }
 ) {
   try {
+    // Await params in Next.js 15
+    const { reportId } = await params;
+
     // Verify user is authenticated
     const session = await auth.api.getSession({
       headers: await headers(),
@@ -17,8 +20,6 @@ export async function GET(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const reportId = params.reportId;
 
     // Forward request to backend API
     const response = await fetch(`${API_GATEWAY_URL}/api/research/${reportId}`, {
