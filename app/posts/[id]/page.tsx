@@ -9,13 +9,12 @@ import { SiteHeader } from "@/components/site-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, ArrowUp, ExternalLink, TrendingUp, Eye, Clock, Sparkles, Loader2, ArrowLeft } from "lucide-react";
+import { MessageSquare, ArrowUp, ExternalLink, TrendingUp, TrendingDown, Minus, Eye, Clock, Sparkles, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatTimeAgo } from "@/lib/date-utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -390,7 +389,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
                                   borderColor: arg.type === "bull" ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"
                                 }}>
                                   <p className="text-sm font-medium">{arg.summary}</p>
-                                  <p className="text-xs text-muted-foreground italic">"{arg.quote}"</p>
+                                  <p className="text-xs text-muted-foreground italic">&ldquo;{arg.quote}&rdquo;</p>
                                 </div>
                               ))}
                             </div>
