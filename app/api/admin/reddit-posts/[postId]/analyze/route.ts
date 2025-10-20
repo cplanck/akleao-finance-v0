@@ -6,9 +6,12 @@ const API_GATEWAY_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:800
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
+    // Await params in Next.js 15
+    const { postId } = await params;
+
     // Verify user is authenticated
     const session = await auth.api.getSession({
       headers: await headers(),
@@ -24,7 +27,7 @@ export async function POST(
 
     // Forward request to backend API with user_id
     const response = await fetch(
-      `${API_GATEWAY_URL}/api/admin/reddit-posts/${params.postId}/analyze?strategy=${strategy}&user_id=${session.user.id}`,
+      `${API_GATEWAY_URL}/api/admin/reddit-posts/${postId}/analyze?strategy=${strategy}&user_id=${session.user.id}`,
       {
         method: "POST",
         headers: {
