@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     let openai_total_tokens_30d = null;
 
     // Use user's admin key if available, otherwise fall back to env OPENAI_API_KEY
-    const { getDecryptedApiKey } = await import("../key/route");
+    const { getDecryptedApiKey } = await import("@/lib/openai-key");
     const userAdminKey = await getDecryptedApiKey(session.user.id, 'admin');
     const adminKeyToUse = userAdminKey || process.env.OPENAI_API_KEY;
 
@@ -215,28 +215,5 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Error fetching OpenAI usage:", error);
     return NextResponse.json({ error: "Failed to fetch usage statistics" }, { status: 500 });
-  }
-}
-
-// Helper function to track OpenAI usage (for internal use)
-export async function trackOpenAIUsage(
-  userId: string,
-  tokens: number,
-  cost: number
-): Promise<void> {
-  try {
-    await query(
-      `INSERT INTO openai_usage (user_id, request_count, tokens_used, estimated_cost, last_request_at)
-       VALUES ($1, 1, $2, $3, NOW())
-       ON CONFLICT (user_id, DATE(last_request_at))
-       DO UPDATE SET
-         request_count = openai_usage.request_count + 1,
-         tokens_used = openai_usage.tokens_used + $2,
-         estimated_cost = openai_usage.estimated_cost + $3,
-         last_request_at = NOW()`,
-      [userId, tokens, cost]
-    );
-  } catch (error) {
-    console.error("Error tracking OpenAI usage:", error);
   }
 }

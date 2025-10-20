@@ -41,3 +41,26 @@ export async function getDecryptedApiKey(userId: string, keyType: 'regular' | 'a
     return null;
   }
 }
+
+// Helper function to track OpenAI usage
+export async function trackOpenAIUsage(
+  userId: string,
+  tokens: number,
+  cost: number
+): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO openai_usage (user_id, request_count, tokens_used, estimated_cost, last_request_at)
+       VALUES ($1, 1, $2, $3, NOW())
+       ON CONFLICT (user_id, DATE(last_request_at))
+       DO UPDATE SET
+         request_count = openai_usage.request_count + 1,
+         tokens_used = openai_usage.tokens_used + $2,
+         estimated_cost = openai_usage.estimated_cost + $3,
+         last_request_at = NOW()`,
+      [userId, tokens, cost]
+    );
+  } catch (error) {
+    console.error("Error tracking OpenAI usage:", error);
+  }
+}
