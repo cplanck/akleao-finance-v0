@@ -16,6 +16,7 @@ import {
 import { useTheme } from "next-themes"
 import { usePathname } from "next/navigation"
 import Image from "next/image"
+import Link from "next/link"
 
 import { NavMain } from "@/components/nav-main"
 import { NavPinnedStocks } from "@/components/nav-pinned-stocks"
@@ -120,7 +121,7 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
               asChild
               className="data-[slot=sidebar-menu-button]:!p-2 hover:bg-transparent"
             >
-              <a href="/" className="flex items-center gap-2 group">
+              <Link href="/" className="flex items-center gap-2 group">
                 {mounted && (
                   <div className="relative">
                     <Image
@@ -134,7 +135,7 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
                     <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg blur-xl -z-10" />
                   </div>
                 )}
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

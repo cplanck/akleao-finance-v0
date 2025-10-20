@@ -313,7 +313,7 @@ export function AIOverview({
                     </div>
                     <p className="text-sm mb-2">{arg.summary}</p>
                     <blockquote className="text-xs italic text-muted-foreground border-l-2 pl-3">
-                      "{arg.quote}"
+                      &ldquo;{arg.quote}&rdquo;
                     </blockquote>
                   </div>
                 ))}
@@ -329,7 +329,7 @@ export function AIOverview({
                 {selectedAnalysis.notable_quotes.map((quote, index) => (
                   <div key={index} className="p-3 rounded-lg bg-muted/30 border">
                     <blockquote className="text-sm mb-2 leading-relaxed">
-                      "{quote.quote}"
+                      &ldquo;{quote.quote}&rdquo;
                     </blockquote>
                     <p className="text-xs text-muted-foreground">
                       — u/{quote.author}
