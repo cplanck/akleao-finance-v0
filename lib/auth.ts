@@ -4,6 +4,9 @@ import { Pool } from "pg";
 export const auth = betterAuth({
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? {
+      rejectUnauthorized: false
+    } : undefined
   }),
   socialProviders: {
     google: {
@@ -24,6 +27,10 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: ["http://localhost:3000"],
+  trustedOrigins: [
+    "http://localhost:3000",
+    "https://akleao-finance-v0.vercel.app",
+    "https://akleao-finance-v0-pj4dlb12x-cplancks-projects.vercel.app"
+  ],
   baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
 });
