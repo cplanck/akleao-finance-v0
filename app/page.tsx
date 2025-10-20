@@ -44,12 +44,12 @@ async function fetchRecentPosts(): Promise<RedditPost[]> {
 }
 
 function calculateHeatScore(post: RedditPost): HeatScore {
-  // When we started tracking this post (created_at = when we indexed it)
-  const hoursTracked = getHoursSince(post.created_at);
+  // When the post was actually posted on Reddit (posted_at = actual Reddit post time)
+  const hoursSincePosted = getHoursSince(post.posted_at);
 
-  // Recency score: heavily favor newly tracked posts
+  // Recency score: heavily favor recently posted content
   // Posts lose 50% of recency value every 6 hours (faster decay)
-  const recencyScore = Math.exp(-hoursTracked / 6) * 100;
+  const recencyScore = Math.exp(-hoursSincePosted / 6) * 100;
 
   // Engagement score: combination of score and comments
   // Normalize by typical values (score weight: 60%, comments: 40%)
