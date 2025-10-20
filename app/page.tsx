@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageSquare, ArrowUp, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { formatTimeAgo, getHoursSince } from "@/lib/date-utils";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -43,11 +44,8 @@ async function fetchRecentPosts(): Promise<RedditPost[]> {
 }
 
 function calculateHeatScore(post: RedditPost): HeatScore {
-  const now = new Date();
-
   // When we started tracking this post (created_at = when we indexed it)
-  const trackedAt = new Date(post.created_at);
-  const hoursTracked = (now.getTime() - trackedAt.getTime()) / (1000 * 60 * 60);
+  const hoursTracked = getHoursSince(post.created_at);
 
   // Recency score: heavily favor newly tracked posts
   // Posts lose 50% of recency value every 6 hours (faster decay)
@@ -69,20 +67,6 @@ function calculateHeatScore(post: RedditPost): HeatScore {
     recencyScore,
     engagementScore
   };
-}
-
-function getTimeAgo(dateString: string): string {
-  const now = new Date();
-  const posted = new Date(dateString);
-  const seconds = Math.floor((now.getTime() - posted.getTime()) / 1000);
-
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 export default function HomePage() {
@@ -163,7 +147,7 @@ export default function HomePage() {
                                       •
                                     </span>
                                     <span className="text-xs text-muted-foreground">
-                                      {getTimeAgo(post.posted_at)}
+                                      {formatTimeAgo(post.posted_at)}
                                     </span>
                                   </div>
                                   <h3 className="font-semibold text-base leading-tight group-hover:text-primary transition-colors line-clamp-2">

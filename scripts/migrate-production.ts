@@ -22,8 +22,22 @@ async function migrate() {
         name TEXT,
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
         "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-        image TEXT
+        image TEXT,
+        role VARCHAR(50) NOT NULL DEFAULT 'user'
       );
+    `);
+
+    // Add role column if it doesn't exist (for existing tables)
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user' AND column_name = 'role'
+        ) THEN
+          ALTER TABLE "user" ADD COLUMN role VARCHAR(50) NOT NULL DEFAULT 'user';
+        END IF;
+      END $$;
     `);
 
     await pool.query(`
