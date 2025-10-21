@@ -8,12 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import StockSelector from "@/components/stock-selector";
 import StockChart from "@/components/stock-chart";
 import KeyMetrics from "@/components/key-metrics";
 import FundamentalsSummary from "@/components/fundamentals-summary";
-import { MarketStatus } from "@/components/market-status";
-import { CommandMenu } from "@/components/command-menu";
 import { RedditAndResearch } from "@/components/reddit-and-research";
 import { fetchStockQuote, fetchStockOverview } from "@/lib/stock-api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -48,8 +45,8 @@ function ResearchContent() {
   const [timeAgo, setTimeAgo] = useState<string>("just now");
   const [showFundamentals, setShowFundamentals] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
-  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [simulateDialogOpen, setSimulateDialogOpen] = useState(false);
+  const [marketStatus, setMarketStatus] = useState<{ market: string; afterHours: boolean; earlyHours: boolean } | null>(null);
 
   // Sync URL with selected stock
   useEffect(() => {
@@ -64,9 +61,31 @@ function ResearchContent() {
     router.push(`/research?symbol=${symbol}`, { scroll: false });
   };
 
-  const { data: quote, isLoading: quoteLoading, dataUpdatedAt: quoteUpdatedAt } = useQuery({
+  // Fetch market status
+  useEffect(() => {
+    const fetchMarketStatus = async () => {
+      try {
+        const response = await fetch("/api/market/status");
+        const data = await response.json();
+        setMarketStatus(data);
+      } catch (error) {
+        console.error("Error fetching market status:", error);
+      }
+    };
+
+    fetchMarketStatus();
+    // Refresh market status every minute
+    const interval = setInterval(fetchMarketStatus, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Determine if we should poll for live prices
+  const shouldPollPrice = marketStatus?.market === "open" || marketStatus?.afterHours || marketStatus?.earlyHours;
+
+  const { data: quote, isLoading: quoteLoading, dataUpdatedAt: quoteUpdatedAt, isFetching: quoteFetching } = useQuery({
     queryKey: ["quote", selectedStock],
     queryFn: () => fetchStockQuote(selectedStock),
+    refetchInterval: shouldPollPrice ? 2000 : false, // Poll every 2 seconds during market hours
   });
 
   const { data: overview, isLoading: overviewLoading } = useQuery({
@@ -92,11 +111,6 @@ function ResearchContent() {
 
   return (
     <SidebarProvider>
-      <CommandMenu
-        open={commandMenuOpen}
-        onOpenChange={setCommandMenuOpen}
-        onSelectStock={handleSelectStock}
-      />
       <AppSidebar
         variant="inset"
         selectedStock={selectedStock}
@@ -109,24 +123,17 @@ function ResearchContent() {
             <div className="flex flex-col gap-2 py-2 md:gap-3 md:py-3">
               {/* Main Content */}
               <div className="px-3 lg:px-4 space-y-3">
-        {/* Market Status & Stock Selector */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <MarketStatus />
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSimulateDialogOpen(true)}
-              className="gap-1.5"
-            >
-              <TrendingUp className="h-4 w-4" />
-              Simulate Position
-            </Button>
-            <StockSelector
-              selectedStock={selectedStock}
-              onSelectStock={handleSelectStock}
-            />
-          </div>
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSimulateDialogOpen(true)}
+            className="gap-1.5"
+          >
+            <TrendingUp className="h-4 w-4" />
+            Simulate Position
+          </Button>
         </div>
 
         {/* Chart and Reddit/Research - 50/50 Split */}
@@ -139,6 +146,7 @@ function ResearchContent() {
               overview={overview}
               quoteLoading={quoteLoading}
               overviewLoading={overviewLoading}
+              isLiveUpdating={shouldPollPrice && quoteFetching}
             />
           </div>
 
@@ -297,15 +305,24 @@ function SimulatePositionDialog({
   currentPrice?: number;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [inputType, setInputType] = useState<"shares" | "dollars">("dollars");
   const [inputValue, setInputValue] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Fetch SPY quote for comparison
+  const { data: spyQuote } = useQuery({
+    queryKey: ["quote", "SPY"],
+    queryFn: () => fetchStockQuote("SPY"),
+    enabled: open,
+  });
 
   const shares = inputType === "shares"
     ? parseFloat(inputValue) || 0
     : currentPrice ? (parseFloat(inputValue) || 0) / currentPrice : 0;
 
   const totalValue = currentPrice ? shares * currentPrice : 0;
+  const investmentAmount = inputType === "dollars" ? (parseFloat(inputValue) || 0) : totalValue;
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -358,6 +375,23 @@ function SimulatePositionDialog({
     });
   };
 
+  // Calculate SPY comparison
+  const getSpyComparison = () => {
+    if (!spyQuote || !currentPrice || !investmentAmount || investmentAmount === 0) return null;
+
+    // Calculate how many SPY shares the same investment would buy
+    const spyShares = investmentAmount / spyQuote.price;
+
+    return {
+      spyPrice: spyQuote.price,
+      spyShares,
+      stockShares: shares,
+      investmentAmount,
+    };
+  };
+
+  const spyComparison = getSpyComparison();
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
@@ -365,10 +399,12 @@ function SimulatePositionDialog({
           <DialogTitle>Simulate Position: ${symbol}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label className="text-xs text-muted-foreground">
-              Current Price: ${currentPrice?.toFixed(2) || "Loading..."}
-            </Label>
+          {/* Current Price Display */}
+          <div className="p-3 bg-gradient-to-br from-primary/5 to-accent/5 rounded-lg border border-primary/10">
+            <div className="text-xs text-muted-foreground font-semibold mb-1">Current Price</div>
+            <div className="text-2xl font-bold font-mono">
+              ${currentPrice?.toFixed(2) || "Loading..."}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -402,16 +438,41 @@ function SimulatePositionDialog({
           </div>
 
           {currentPrice && inputValue && (
-            <div className="p-3 bg-muted rounded-lg space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Shares:</span>
-                <span className="font-mono font-semibold">{shares.toFixed(3)}</span>
+            <>
+              <div className="p-3 bg-muted rounded-lg space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Shares:</span>
+                  <span className="font-mono font-semibold">{shares.toFixed(3)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Value:</span>
+                  <span className="font-mono font-semibold">${totalValue.toFixed(2)}</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Total Value:</span>
-                <span className="font-mono font-semibold">${totalValue.toFixed(2)}</span>
-              </div>
-            </div>
+
+              {/* SPY Comparison */}
+              {spyComparison && spyQuote && (
+                <div className="p-3 bg-gradient-to-br from-blue-500/5 to-blue-600/5 rounded-lg border border-blue-500/10">
+                  <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" />
+                    Benchmark Comparison
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    For ${investmentAmount.toFixed(2)}, you could buy <span className="font-semibold text-foreground">{spyComparison.stockShares.toFixed(3)} shares of {symbol}</span> or <span className="font-semibold text-foreground">{spyComparison.spyShares.toFixed(3)} shares of SPY</span> (S&amp;P 500 ETF).
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-blue-500/10 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <div className="text-muted-foreground">SPY Price</div>
+                      <div className="font-mono font-semibold">${spyComparison.spyPrice.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">{symbol} Price</div>
+                      <div className="font-mono font-semibold">${currentPrice.toFixed(2)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div>

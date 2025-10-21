@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MessageSquare, ArrowUp, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { formatTimeAgo, getHoursSince } from "@/lib/date-utils";
+import { TickerBadge } from "@/components/ticker-badge";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -179,12 +180,10 @@ export default function HomePage() {
                                       href={`/research?symbol=${stock}`}
                                       onClick={(e) => e.stopPropagation()}
                                     >
-                                      <Badge
-                                        variant={stock === post.primary_stock ? "default" : "secondary"}
-                                        className="text-xs cursor-pointer hover:bg-primary/80 transition-colors"
-                                      >
-                                        ${stock}
-                                      </Badge>
+                                      <TickerBadge
+                                        symbol={stock}
+                                        className="cursor-pointer hover:bg-secondary/80 transition-colors"
+                                      />
                                     </Link>
                                   ))}
                                   {mentionedStocks.length > 3 && (

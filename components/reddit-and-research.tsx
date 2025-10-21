@@ -11,6 +11,7 @@ import remarkGfm from "remark-gfm";
 import { ResearchGenerator } from "@/components/research-generator";
 import { SubredditManager } from "@/components/subreddit-manager";
 import { AggregatedSentiment } from "@/components/aggregated-sentiment";
+import { formatTimeAgo } from "@/lib/date-utils";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -216,19 +217,19 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
             <TabsList className="h-7">
               <TabsTrigger value="ai-summary" className="text-xs gap-1.5 px-2">
                 <BarChart3 className="h-3 w-3" />
-                AI Summary
+                <span className="hidden sm:inline">AI Summary</span>
               </TabsTrigger>
               <TabsTrigger value="research" className="text-xs gap-1.5 px-2">
                 <FileText className="h-3 w-3" />
-                Deep Research
+                <span className="hidden sm:inline">Deep Research</span>
               </TabsTrigger>
               <TabsTrigger value="reddit" className="text-xs gap-1.5 px-2">
                 <MessageSquare className="h-3 w-3" />
-                Reddit
+                <span className="hidden sm:inline">Reddit</span>
               </TabsTrigger>
               <TabsTrigger value="manage" className="text-xs gap-1.5 px-2">
                 <Settings className="h-3 w-3" />
-                Manage
+                <span className="hidden sm:inline">Manage</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -279,7 +280,7 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
               return (
                 <div
                   key={post.id}
-                  onClick={() => router.push(`/admin/posts?post=${post.id}`)}
+                  onClick={() => router.push(`/posts/${post.id}`)}
                   className="border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors space-y-2 cursor-pointer"
                 >
                   {/* Header */}
@@ -349,11 +350,7 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
                   {/* Footer */}
                   <div className="flex items-center justify-between pt-2 border-t border-border/50">
                     <span className="text-xs text-muted-foreground">
-                      {new Date(post.posted_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric"
-                      })}
+                      {formatTimeAgo(post.posted_at)}
                     </span>
                     <a
                       href={post.url}

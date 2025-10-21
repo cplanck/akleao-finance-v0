@@ -414,12 +414,44 @@ function PositionDetailsDialog({
   const initialValue = position.shares * position.entry_price;
   const latestData = chartData.length > 0 ? chartData[chartData.length - 1] : null;
 
+  // Fetch current stock price
+  const { data: currentQuote } = useQuery({
+    queryKey: ["stock-quote", position.stock_symbol],
+    queryFn: async () => {
+      const res = await fetch(`/api/stock/quote?symbol=${position.stock_symbol}`);
+      if (!res.ok) throw new Error("Failed to fetch stock data");
+      return res.json();
+    },
+    staleTime: 5000,
+    enabled: position.is_active,
+  });
+
   // Calculate actual gains
   const currentStockValue = latestData?.stockValue || initialValue;
   const currentSpyValue = latestData?.spyValue || initialValue;
   const stockGain = currentStockValue - initialValue;
   const spyGain = currentSpyValue - initialValue;
   const positionGainVsIndex = stockGain - spyGain;
+
+  // Calculate narrative comparison
+  const getNarrativeComparison = () => {
+    if (!latestData) return null;
+
+    const gainDifference = stockGain - spyGain;
+    const isOutperforming = gainDifference > 0;
+    const verb = isOutperforming ? "gained" : "lost";
+    const comparisonVerb = isOutperforming ? "more than" : "less than";
+
+    return {
+      isOutperforming,
+      verb,
+      comparisonVerb,
+      difference: Math.abs(gainDifference),
+      percentDifference: latestData.alpha,
+    };
+  };
+
+  const narrative = getNarrativeComparison();
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -434,6 +466,45 @@ function PositionDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Current Price Display */}
+          {position.is_active && currentQuote && (
+            <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/10">
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-muted-foreground font-semibold mb-1">Current Stock Price</div>
+                    <div className="text-3xl font-bold font-mono">${currentQuote.price.toFixed(2)}</div>
+                    <div className={`text-sm font-mono mt-1 ${currentQuote.change >= 0 ? "text-green-500" : "text-red-500"}`}>
+                      {currentQuote.change >= 0 ? "+" : ""}{currentQuote.change.toFixed(2)} ({currentQuote.changePercent >= 0 ? "+" : ""}{currentQuote.changePercent.toFixed(2)}%)
+                    </div>
+                  </div>
+                  {currentQuote.marketSession && currentQuote.marketSession !== "regular" && (
+                    <Badge variant="secondary" className="text-xs">
+                      {currentQuote.marketSession === "post" ? "After Hours" : "Pre-Market"}
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Natural Language Performance Summary */}
+          {narrative && (
+            <Card className={`border ${narrative.isOutperforming ? "bg-green-500/5 border-green-500/20" : "bg-red-500/5 border-red-500/20"}`}>
+              <CardContent className="pt-4">
+                <p className="text-sm text-foreground leading-relaxed">
+                  This position has <span className="font-semibold">{narrative.verb} ${narrative.difference.toFixed(2)}</span> ({narrative.isOutperforming ? "+" : ""}{narrative.percentDifference.toFixed(2)}%)&nbsp;
+                  <span className="font-semibold">{narrative.comparisonVerb}</span> an equivalent investment in <span className="font-semibold">SPY</span>.
+                  {narrative.isOutperforming ? (
+                    <> 🎯 Your position is <span className="font-semibold text-green-600 dark:text-green-400">outperforming</span> the market!</>
+                  ) : (
+                    <> The market is currently <span className="font-semibold text-red-600 dark:text-red-400">outperforming</span> this position.</>
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Performance Summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card>

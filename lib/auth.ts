@@ -29,6 +29,8 @@ export const auth = betterAuth({
   },
   trustedOrigins: [
     "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
     "https://akleao-finance-v0.vercel.app",
     "https://akleao-finance-v0-pj4dlb12x-cplancks-projects.vercel.app"
   ],

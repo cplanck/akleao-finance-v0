@@ -117,7 +117,7 @@ function PostsPageContent() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Reddit Posts</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Reddit Posts</h1>
         <div className="text-sm text-muted-foreground">
           {data && (
             showTrackedOnly
@@ -133,8 +133,8 @@ function PostsPageContent() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-end gap-4">
-            <div className="w-[250px]">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 sm:gap-4">
+            <div className="w-full sm:w-[250px]">
               <label className="text-sm font-medium mb-2 block">Subreddit</label>
               <Popover open={subredditOpen} onOpenChange={setSubredditOpen}>
                 <PopoverTrigger asChild>
@@ -182,7 +182,7 @@ function PostsPageContent() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="w-[250px]">
+            <div className="w-full sm:w-[250px]">
               <label className="text-sm font-medium mb-2 block">Stock Symbol</label>
               <Input
                 placeholder="e.g., AAPL"

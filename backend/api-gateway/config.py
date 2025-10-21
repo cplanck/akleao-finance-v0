@@ -2,6 +2,8 @@
 
 from pydantic_settings import BaseSettings
 from typing import List
+import json
+import os
 
 
 class Settings(BaseSettings):
@@ -17,11 +19,25 @@ class Settings(BaseSettings):
     ENV: str = "development"
     LOG_LEVEL: str = "INFO"
 
-    # CORS
-    CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "https://akleao-finance-v0.vercel.app"
-    ]
+    # CORS - parse from environment or use defaults
+    @property
+    def CORS_ORIGINS(self) -> List[str]:
+        """Parse CORS origins from environment or use defaults."""
+        cors_env = os.getenv("CORS_ORIGINS")
+        if cors_env:
+            try:
+                # Try to parse as JSON array
+                return json.loads(cors_env)
+            except json.JSONDecodeError:
+                # Fallback: split by comma
+                return [origin.strip() for origin in cors_env.split(",")]
+        # Default origins for local development
+        return [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3002",
+            "https://akleao-finance-v0.vercel.app"
+        ]
 
     # JWT Authentication
     JWT_SECRET_KEY: str = "your-secret-key-change-in-production"

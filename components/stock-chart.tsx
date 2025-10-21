@@ -15,6 +15,7 @@ interface StockChartProps {
     price: number;
     change: number;
     changePercent: number;
+    marketSession?: "regular" | "pre" | "post";
   };
   overview?: {
     name: string;
@@ -23,6 +24,7 @@ interface StockChartProps {
   };
   quoteLoading?: boolean;
   overviewLoading?: boolean;
+  isLiveUpdating?: boolean;
 }
 
 const chartConfig = {
@@ -37,7 +39,8 @@ export default function StockChart({
   quote,
   overview,
   quoteLoading,
-  overviewLoading
+  overviewLoading,
+  isLiveUpdating = false
 }: StockChartProps) {
   const [timeRange, setTimeRange] = useState("1M");
 
@@ -133,11 +136,29 @@ export default function StockChart({
             </div>
           </div>
           <div className="text-left sm:text-right group h-[52px] flex flex-col justify-center">
-            <div className="text-2xl font-bold font-mono transition-transform duration-300 group-hover:scale-105 h-7 tabular-nums">
+            <div className="text-2xl font-bold font-mono transition-transform duration-300 group-hover:scale-105 h-7 tabular-nums flex items-center gap-2 sm:justify-end flex-wrap">
               {quoteLoading ? (
                 <span className="inline-block h-7 w-28 bg-muted animate-pulse rounded"></span>
               ) : (
-                `$${quote?.price.toFixed(2)}`
+                <>
+                  {isLiveUpdating && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                  )}
+                  {`$${quote?.price.toFixed(2)}`}
+                  {quote?.marketSession === "post" && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-semibold">
+                      After Hours
+                    </span>
+                  )}
+                  {quote?.marketSession === "pre" && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold">
+                      Pre-Market
+                    </span>
+                  )}
+                </>
               )}
             </div>
             <div

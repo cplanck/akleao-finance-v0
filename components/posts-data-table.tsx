@@ -17,6 +17,7 @@ import {
 import { ArrowUpDown, ChevronDown, ExternalLink, MessageSquare, Eye, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TickerBadge } from "@/components/ticker-badge";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -133,24 +134,24 @@ export function PostsDataTable({ data }: PostsDataTableProps) {
         const hasNewComments = commentGrowth > 0;
 
         return (
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="font-medium">{post.title}</div>
+          <div className="space-y-2 max-w-xl">
+            <div className="font-medium truncate">{post.title}</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-xs text-muted-foreground">
+                r/{post.subreddit}
+              </div>
               {isTracking && (
-                <Badge variant="outline" className="text-xs gap-1 bg-blue-50 text-blue-700 border-blue-200">
+                <Badge variant="outline" className="text-xs gap-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 shrink-0">
                   <Eye className="h-3 w-3" />
                   Tracking
                 </Badge>
               )}
               {hasNewComments && (
-                <Badge variant="outline" className="text-xs gap-1 bg-green-50 text-green-700 border-green-200">
+                <Badge variant="outline" className="text-xs gap-1 bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 shrink-0">
                   <TrendingUp className="h-3 w-3" />
-                  +{commentGrowth} new
+                  +{commentGrowth}
                 </Badge>
               )}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              r/{post.subreddit}
             </div>
           </div>
         );
@@ -170,13 +171,23 @@ export function PostsDataTable({ data }: PostsDataTableProps) {
         );
       },
       cell: ({ row }) => {
-        const stock = row.getValue("primary_stock") as string | null;
-        return stock ? (
-          <Badge variant="default" className="font-mono">
-            ${stock}
-          </Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+        const post = row.original;
+        const mentionedStocks = Array.isArray(post.mentioned_stocks)
+          ? post.mentioned_stocks
+          : typeof post.mentioned_stocks === "string" && post.mentioned_stocks
+          ? JSON.parse(post.mentioned_stocks)
+          : [];
+
+        if (mentionedStocks.length === 0) {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            {mentionedStocks.map((stock: string) => (
+              <TickerBadge key={stock} symbol={stock} />
+            ))}
+          </div>
         );
       },
     },
@@ -340,7 +351,7 @@ export function PostsDataTable({ data }: PostsDataTableProps) {
         />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto hidden md:flex">
+            <Button variant="outline" className="ml-auto hidden lg:flex">
               Columns <ChevronDown className="ml-2 h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -366,8 +377,8 @@ export function PostsDataTable({ data }: PostsDataTableProps) {
         </DropdownMenu>
       </div>
 
-      {/* Mobile Card View */}
-      <div className="md:hidden space-y-3">
+      {/* Card View - Show on screens smaller than lg */}
+      <div className="lg:hidden space-y-3">
         {table.getRowModel().rows?.length ? (
           table.getRowModel().rows.map((row) => {
             const post = row.original;
@@ -375,28 +386,31 @@ export function PostsDataTable({ data }: PostsDataTableProps) {
             const isTracking = post.track_comments && post.track_until && new Date(trackUntilUTC) > new Date();
             const commentGrowth = post.num_comments - post.initial_num_comments;
             const hasNewComments = commentGrowth > 0;
+            const mentionedStocks = Array.isArray(post.mentioned_stocks)
+              ? post.mentioned_stocks
+              : typeof post.mentioned_stocks === "string" && post.mentioned_stocks
+              ? JSON.parse(post.mentioned_stocks)
+              : [];
 
             return (
               <Link key={row.id} href={`/posts/${post.id}`}>
                 <div className="border rounded-lg p-4 space-y-3 hover:bg-muted/50 transition-colors">
                   {/* Title and badges */}
                   <div className="space-y-2">
-                    <div className="font-medium text-sm leading-tight">{post.title}</div>
+                    <div className="font-medium text-sm leading-tight line-clamp-2">{post.title}</div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge variant="outline" className="text-xs">r/{post.subreddit}</Badge>
-                      {post.primary_stock && (
-                        <Badge variant="default" className="text-xs font-mono">
-                          ${post.primary_stock}
-                        </Badge>
-                      )}
+                      {mentionedStocks.map((stock: string) => (
+                        <TickerBadge key={stock} symbol={stock} />
+                      ))}
                       {isTracking && (
-                        <Badge variant="outline" className="text-xs gap-1 bg-blue-50 text-blue-700 border-blue-200">
+                        <Badge variant="outline" className="text-xs gap-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 shrink-0">
                           <Eye className="h-3 w-3" />
                           Tracking
                         </Badge>
                       )}
                       {hasNewComments && (
-                        <Badge variant="outline" className="text-xs gap-1 bg-green-50 text-green-700 border-green-200">
+                        <Badge variant="outline" className="text-xs gap-1 bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 shrink-0">
                           <TrendingUp className="h-3 w-3" />
                           +{commentGrowth}
                         </Badge>
@@ -424,8 +438,8 @@ export function PostsDataTable({ data }: PostsDataTableProps) {
         )}
       </div>
 
-      {/* Desktop Table View */}
-      <div className="hidden md:block rounded-md border">
+      {/* Table View - Show on lg screens and above */}
+      <div className="hidden lg:block rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

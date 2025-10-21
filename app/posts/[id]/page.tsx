@@ -2,6 +2,7 @@
 
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -15,6 +16,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatTimeAgo } from "@/lib/date-utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TickerBadge } from "@/components/ticker-badge";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -96,7 +98,7 @@ async function fetchComments(postId: string): Promise<RedditComment[]> {
 }
 
 async function fetchAnalyses(postId: string): Promise<{ analyses: PostAnalysis[] }> {
-  const res = await fetch(`${API_URL}/api/admin/posts/${postId}/analyses`);
+  const res = await fetch(`${API_URL}/api/admin/reddit-posts/${postId}/analyses`);
   if (!res.ok) throw new Error("Failed to fetch analyses");
   return res.json();
 }
@@ -169,6 +171,7 @@ function CommentTree({ comments, depth = 0 }: { comments: RedditComment[]; depth
 
 export default function PostPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"comments" | "ai-analysis">("comments");
 
   const { data: post, isLoading: isLoadingPost } = useQuery({
@@ -239,11 +242,9 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
           {/* Header with back button */}
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Link>
+            <Button variant="ghost" size="sm" onClick={() => router.back()}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
             </Button>
           </div>
 
@@ -266,12 +267,10 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
                 <div className="flex items-center gap-2 flex-wrap">
                   {mentionedStocks.map((stock: string) => (
                     <Link key={stock} href={`/research?symbol=${stock}`}>
-                      <Badge
-                        variant={stock === post.primary_stock ? "default" : "secondary"}
-                        className="cursor-pointer hover:bg-primary/80 transition-colors text-xs"
-                      >
-                        ${stock}
-                      </Badge>
+                      <TickerBadge
+                        symbol={stock}
+                        className="cursor-pointer hover:bg-secondary/80 transition-colors"
+                      />
                     </Link>
                   ))}
                 </div>
@@ -349,7 +348,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
                         <CardTitle className="flex items-center justify-between">
                           <span>Analysis Summary</span>
                           {analysis.stock_symbol && (
-                            <Badge variant="default">${analysis.stock_symbol}</Badge>
+                            <TickerBadge symbol={analysis.stock_symbol} />
                           )}
                         </CardTitle>
                       </CardHeader>

@@ -1,0 +1,76 @@
+# Local development overrides
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.local.yml up
+
+version: '3.8'
+
+services:
+  # Local PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: akleao-postgres-local
+    environment:
+      POSTGRES_USER: akleao
+      POSTGRES_PASSWORD: akleao_dev_password
+      POSTGRES_DB: akleao
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U akleao"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway - override to depend on local postgres
+  api-gateway:
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Reddit Scheduler - override to depend on local postgres
+  reddit-scheduler:
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Reddit Scraper - override to depend on local postgres
+  reddit-scraper:
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Comment Scraper - override to depend on local postgres
+  comment-scraper:
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Deep Research - override to depend on local postgres
+  deep-research:
+    environment:
+      - DATABASE_URL=postgresql://akleao:akleao_dev_password@postgres:5432/akleao
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data_local:

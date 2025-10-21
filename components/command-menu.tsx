@@ -31,30 +31,120 @@ export function CommandMenu({ open, onOpenChange, onSelectStock }: CommandMenuPr
   const [recentSearches, setRecentSearches] = React.useState<string[]>([]);
   const [searchResults, setSearchResults] = React.useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = React.useState(false);
+  const [selectedValue, setSelectedValue] = React.useState<string>("");
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const recentSearchesRef = React.useRef<string[]>([]);
 
   // Load recent searches from localStorage
   React.useEffect(() => {
     const stored = localStorage.getItem("recentStockSearches");
     if (stored) {
-      setRecentSearches(JSON.parse(stored));
+      const parsed = JSON.parse(stored);
+      setRecentSearches(parsed);
+      recentSearchesRef.current = parsed;
     }
   }, []);
 
-  // Autofocus input when dialog opens
+  // Keep ref in sync with state
+  React.useEffect(() => {
+    recentSearchesRef.current = recentSearches;
+  }, [recentSearches]);
+
+  // Get recent stock data - fetch from API for stocks not in SP500_STOCKS
+  const [recentStocksData, setRecentStocksData] = React.useState<SearchResult[]>([]);
+
+  React.useEffect(() => {
+    if (recentSearches.length === 0) {
+      setRecentStocksData([]);
+      return;
+    }
+
+    const fetchRecentStocks = async () => {
+      const stocksData: SearchResult[] = [];
+
+      for (const symbol of recentSearches) {
+        // First try to find in SP500_STOCKS for instant display
+        const sp500Stock = SP500_STOCKS.find(s => s.symbol === symbol);
+        if (sp500Stock) {
+          stocksData.push({
+            symbol: sp500Stock.symbol,
+            name: sp500Stock.name,
+            sector: sp500Stock.sector,
+          });
+        } else {
+          // If not in SP500, fetch from API
+          try {
+            const response = await fetch(`/api/stock/overview?symbol=${symbol}`);
+            if (response.ok) {
+              const data = await response.json();
+              stocksData.push({
+                symbol: data.symbol,
+                name: data.name,
+                sector: data.sector,
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching stock data for ${symbol}:`, error);
+            // Add as symbol only if fetch fails
+            stocksData.push({
+              symbol: symbol,
+              name: symbol,
+              sector: "Unknown",
+            });
+          }
+        }
+      }
+
+      setRecentStocksData(stocksData);
+    };
+
+    fetchRecentStocks();
+  }, [recentSearches]);
+
+  // Autofocus input when dialog opens and clear search when closed
   React.useEffect(() => {
     if (open) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 0);
+      // Set default selected value to first recent search if available
+      if (recentStocksData.length > 0) {
+        setSelectedValue(recentStocksData[0].symbol);
+      } else if (POPULAR_STOCKS.length > 0) {
+        setSelectedValue(POPULAR_STOCKS[0].symbol);
+      }
+
+      // Multiple attempts to ensure focus works
+      const focusInput = () => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.select();
+        }
+      };
+
+      // Try immediately
+      focusInput();
+
+      // Try after animation frame
+      requestAnimationFrame(() => {
+        focusInput();
+      });
+
+      // Try after a short delay as backup
+      const timeoutId = setTimeout(focusInput, 100);
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      setSearch("");
+      setSelectedValue("");
     }
-  }, [open]);
+  }, [open, recentStocksData]);
 
   const handleSelect = React.useCallback((symbol: string) => {
-    // Save to recent searches
-    const updated = [symbol, ...recentSearches.filter(s => s !== symbol)].slice(0, 5);
+    // Save to recent searches using ref to get current value
+    const updated = [symbol, ...recentSearchesRef.current.filter(s => s !== symbol)].slice(0, 5);
     setRecentSearches(updated);
     localStorage.setItem("recentStockSearches", JSON.stringify(updated));
+
+    // Close dialog first
+    onOpenChange(false);
 
     // Navigate or callback
     if (onSelectStock) {
@@ -62,10 +152,7 @@ export function CommandMenu({ open, onOpenChange, onSelectStock }: CommandMenuPr
     } else {
       router.push(`/research?symbol=${symbol}`);
     }
-
-    onOpenChange(false);
-    setSearch("");
-  }, [recentSearches, onSelectStock, router, onOpenChange]);
+  }, [onSelectStock, router, onOpenChange]);
 
   // Handle Cmd+K to open/close
   React.useEffect(() => {
@@ -105,12 +192,21 @@ export function CommandMenu({ open, onOpenChange, onSelectStock }: CommandMenuPr
     return () => clearTimeout(timeoutId);
   }, [search]);
 
-  // Get recent stock data
-  const recentStocksData = React.useMemo(() => {
-    return recentSearches
-      .map(symbol => SP500_STOCKS.find(s => s.symbol === symbol))
-      .filter((stock): stock is NonNullable<typeof stock> => stock !== undefined);
-  }, [recentSearches]);
+  // Global escape handler
+  React.useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenChange(false);
+      }
+    };
+
+    if (open) {
+      document.addEventListener("keydown", handleEscape, { capture: true });
+      return () => document.removeEventListener("keydown", handleEscape, { capture: true });
+    }
+  }, [open, onOpenChange]);
 
   return (
     <>
@@ -118,25 +214,29 @@ export function CommandMenu({ open, onOpenChange, onSelectStock }: CommandMenuPr
       {open && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 animate-in fade-in-0"
-          onClick={() => onOpenChange(false)}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
+              onOpenChange(false);
+            }
+          }}
         />
       )}
 
       {/* Command Palette */}
       <Command
         className={cn(
-          "fixed left-[50%] top-[40%] z-50 w-full max-w-2xl translate-x-[-50%] translate-y-[-50%]",
+          "fixed left-[50%] top-[40%] z-[60] w-full max-w-2xl translate-x-[-50%] translate-y-[-50%]",
           "rounded-xl border border-primary/20 bg-card/95 backdrop-blur-xl shadow-2xl",
           "overflow-hidden transition-all duration-200",
           open ? "animate-in fade-in-0 zoom-in-95" : "hidden"
         )}
         loop
         shouldFilter={false}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.preventDefault();
-            onOpenChange(false);
-          }
+        value={selectedValue}
+        onValueChange={setSelectedValue}
+        onMouseDown={(e) => {
+          e.stopPropagation();
         }}
       >
         {/* Search Input */}
@@ -147,6 +247,7 @@ export function CommandMenu({ open, onOpenChange, onSelectStock }: CommandMenuPr
             value={search}
             onValueChange={setSearch}
             placeholder="Search stocks by symbol or name..."
+            autoFocus
             className="flex h-14 w-full bg-transparent py-3 text-base outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
           />
           <kbd

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { ClockIcon } from "lucide-react";
 
 interface MarketStatusData {
   market: "open" | "closed" | "extended-hours";
@@ -19,7 +18,6 @@ interface MarketStatusData {
 export function MarketStatus() {
   const [status, setStatus] = useState<MarketStatusData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -41,15 +39,6 @@ export function MarketStatus() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    // Update current time every second
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
   const getMarketStatusInfo = () => {
     if (!status) return null;
 
@@ -65,19 +54,19 @@ export function MarketStatus() {
 
     if (isOpen) {
       return {
-        status: "Open",
-        message: `Market closes at ${marketClose}`,
+        status: "Market Open",
+        message: `Closes at ${marketClose}`,
         variant: "default" as const,
         color: "text-green-600 dark:text-green-400",
-        badgeClass: "bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0 shadow-lg shadow-green-500/30 animate-pulse",
-        iconClass: "text-green-500 animate-pulse",
+        badgeClass: "bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0 shadow-md shadow-green-500/20",
+        iconClass: "text-green-500",
       };
     }
 
     if (isPreMarket) {
       return {
-        status: "Pre-Market",
-        message: `Market opens at ${marketOpen}`,
+        status: "Market Pre-Market",
+        message: `Opens at ${marketOpen}`,
         variant: "secondary" as const,
         color: "text-blue-600 dark:text-blue-400",
         badgeClass: "bg-gradient-to-r from-blue-500 to-cyan-500 text-white border-0 shadow-md shadow-blue-500/20",
@@ -87,7 +76,7 @@ export function MarketStatus() {
 
     if (isAfterHours) {
       return {
-        status: "After Hours",
+        status: "Market After Hours",
         message: `Extended hours until ${afterHoursClose}`,
         variant: "secondary" as const,
         color: "text-blue-600 dark:text-blue-400",
@@ -103,8 +92,8 @@ export function MarketStatus() {
 
     if (isWeekend) {
       return {
-        status: "Closed",
-        message: "Market opens Monday at " + marketOpen,
+        status: "Market Closed",
+        message: "Opens Monday at " + marketOpen,
         variant: "outline" as const,
         color: "text-muted-foreground",
         badgeClass: "bg-slate-500/20 text-slate-400 dark:text-slate-300 backdrop-blur-sm border-slate-500/30",
@@ -116,7 +105,7 @@ export function MarketStatus() {
     const hour = now.getHours();
     if (hour < 9) {
       return {
-        status: "Closed",
+        status: "Market Closed",
         message: `Pre-market starts at ${preMarketOpen}`,
         variant: "outline" as const,
         color: "text-muted-foreground",
@@ -125,8 +114,8 @@ export function MarketStatus() {
       };
     } else {
       return {
-        status: "Closed",
-        message: `Market opens tomorrow at ${marketOpen}`,
+        status: "Market Closed",
+        message: `Opens tomorrow at ${marketOpen}`,
         variant: "outline" as const,
         color: "text-muted-foreground",
         badgeClass: "bg-slate-500/20 text-slate-400 dark:text-slate-300 backdrop-blur-sm border-slate-500/30",
@@ -150,19 +139,11 @@ export function MarketStatus() {
 
   return (
     <div className="flex items-center gap-2 text-sm group">
-      <ClockIcon className={`h-4 w-4 ${statusInfo.iconClass} transition-transform duration-300 group-hover:scale-110`} />
       <Badge className={`text-xs font-semibold transition-all duration-300 ${statusInfo.badgeClass}`}>
         {statusInfo.status}
       </Badge>
       <span className="text-muted-foreground hidden sm:inline font-medium transition-colors duration-300 group-hover:text-foreground/80">
         {statusInfo.message}
-      </span>
-      <span className="text-muted-foreground ml-auto font-mono text-xs tabular-nums px-2 py-1 rounded-md bg-muted/30 backdrop-blur-sm border border-muted-foreground/10">
-        {currentTime.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          timeZoneName: "short",
-        })}
       </span>
     </div>
   );

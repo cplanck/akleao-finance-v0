@@ -254,164 +254,128 @@ export function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Overview Cards - Top Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Tracked Posts */}
         <Card className="border-primary/10 hover:border-primary/20 transition-all duration-300">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Currently Tracking
-                </p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-16" />
-                ) : (
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-3xl font-bold tracking-tight">
-                      {stats?.tracked_posts.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      posts
-                    </p>
-                  </div>
-                )}
-                {!isLoading && (
-                  <p className="text-xs text-muted-foreground">
-                    of {stats?.total_posts.toLocaleString()} total
+          <CardContent className="p-4 sm:p-6 relative">
+            <Eye className="absolute top-3 right-3 sm:top-4 sm:right-4 h-4 w-4 text-muted-foreground/40" />
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Currently Tracking
+              </p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+                    {stats?.tracked_posts.toLocaleString()}
                   </p>
-                )}
-              </div>
-              <div className={`h-12 w-12 rounded-xl bg-gradient-to-br flex items-center justify-center ${
-                stats?.tracked_posts
-                  ? 'from-blue-500/20 to-blue-600/20 ring-1 ring-blue-500/30'
-                  : 'from-muted/30 to-muted/20'
-              }`}>
-                <Eye className={`h-6 w-6 ${stats?.tracked_posts ? 'text-blue-500' : 'text-muted-foreground'}`} />
-              </div>
+                  <p className="text-xs text-muted-foreground">
+                    posts
+                  </p>
+                </div>
+              )}
+              {!isLoading && (
+                <p className="text-xs text-muted-foreground">
+                  of {stats?.total_posts.toLocaleString()} total
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
 
         {/* Comment Activity */}
         <Card className="border-primary/10 hover:border-primary/20 transition-all duration-300">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Last Hour
-                </p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-16" />
-                ) : (
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-3xl font-bold tracking-tight">
-                      {stats?.recent_comments_1h.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      comments
-                    </p>
-                  </div>
-                )}
-                {!isLoading && (
-                  <p className="text-xs text-muted-foreground">
-                    {stats?.total_comments.toLocaleString()} total comments
+          <CardContent className="p-4 sm:p-6 relative">
+            <MessageSquare className="absolute top-3 right-3 sm:top-4 sm:right-4 h-4 w-4 text-muted-foreground/40" />
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Last Hour
+              </p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+                    {stats?.recent_comments_1h.toLocaleString()}
                   </p>
-                )}
-              </div>
-              <div className={`h-12 w-12 rounded-xl bg-gradient-to-br flex items-center justify-center ${
-                stats?.recent_comments_1h && stats.recent_comments_1h > 0
-                  ? 'from-green-500/20 to-green-600/20 ring-1 ring-green-500/30'
-                  : 'from-muted/30 to-muted/20'
-              }`}>
-                <MessageSquare className={`h-6 w-6 ${
-                  stats?.recent_comments_1h && stats.recent_comments_1h > 0
-                    ? 'text-green-500'
-                    : 'text-muted-foreground'
-                }`} />
-              </div>
+                  <p className="text-xs text-muted-foreground">
+                    comments
+                  </p>
+                </div>
+              )}
+              {!isLoading && (
+                <p className="text-xs text-muted-foreground">
+                  {stats?.total_comments.toLocaleString()} total comments
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
 
         {/* Comment Growth */}
         <Card className="border-primary/10 hover:border-primary/20 transition-all duration-300">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Growing
-                </p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-16" />
-                ) : (
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-3xl font-bold tracking-tight">
-                      {stats?.posts_with_growth_1h.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      posts
-                    </p>
-                  </div>
-                )}
-                {!isLoading && (
-                  <p className="text-xs text-muted-foreground">
-                    +{stats?.total_new_comments.toLocaleString()} new comments total
+          <CardContent className="p-4 sm:p-6 relative">
+            <TrendingUp className="absolute top-3 right-3 sm:top-4 sm:right-4 h-4 w-4 text-muted-foreground/40" />
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Growing
+              </p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+                    {stats?.posts_with_growth_1h.toLocaleString()}
                   </p>
-                )}
-              </div>
-              <div className={`h-12 w-12 rounded-xl bg-gradient-to-br flex items-center justify-center ${
-                stats?.posts_with_growth_1h && stats.posts_with_growth_1h > 0
-                  ? 'from-green-500/20 to-green-600/20 ring-1 ring-green-500/30'
-                  : 'from-muted/30 to-muted/20'
-              }`}>
-                <TrendingUp className={`h-6 w-6 ${
-                  stats?.posts_with_growth_1h && stats.posts_with_growth_1h > 0
-                    ? 'text-green-500 animate-pulse'
-                    : 'text-muted-foreground'
-                }`} />
-              </div>
+                  <p className="text-xs text-muted-foreground">
+                    posts
+                  </p>
+                </div>
+              )}
+              {!isLoading && (
+                <p className="text-xs text-muted-foreground">
+                  +{stats?.total_new_comments.toLocaleString()} new comments total
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
 
         {/* Unique Stocks */}
         <Card className="border-primary/10 hover:border-primary/20 transition-all duration-300">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Stocks Tracked
-                </p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-16" />
-                ) : (
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-3xl font-bold tracking-tight">
-                      {stats?.total_stocks.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      symbols
-                    </p>
-                  </div>
-                )}
-                {!isLoading && (
-                  <p className="text-xs text-muted-foreground">
-                    from {stats?.tracked_subreddits_count} subreddits
+          <CardContent className="p-4 sm:p-6 relative">
+            <Sparkles className="absolute top-3 right-3 sm:top-4 sm:right-4 h-4 w-4 text-muted-foreground/40" />
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Stocks Tracked
+              </p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+                    {stats?.total_stocks.toLocaleString()}
                   </p>
-                )}
-              </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-600/20 ring-1 ring-orange-500/30 flex items-center justify-center">
-                <Sparkles className="h-6 w-6 text-orange-500" />
-              </div>
+                  <p className="text-xs text-muted-foreground">
+                    symbols
+                  </p>
+                </div>
+              )}
+              {!isLoading && (
+                <p className="text-xs text-muted-foreground">
+                  from {stats?.tracked_subreddits_count} subreddits
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Second Row: OpenAI Settings & Reddit Scraper */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <OpenAISettingsCard />
 
         {/* Reddit Scraper */}
@@ -472,7 +436,7 @@ export function AdminDashboard() {
       <TrackedSubredditsTable />
 
       {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Top Mentioned Stocks */}
         <Card>
           <CardHeader>

@@ -9,6 +9,22 @@ export interface StockQuote {
   high: number;
   low: number;
   volume: number;
+  marketSession?: "regular" | "pre" | "post";
+  regularMarket?: {
+    price: number;
+    change: number;
+    changePercent: number;
+  };
+  postMarket?: {
+    price: number;
+    change: number;
+    changePercent: number;
+  };
+  preMarket?: {
+    price: number;
+    change: number;
+    changePercent: number;
+  };
 }
 
 export interface StockOverview {
