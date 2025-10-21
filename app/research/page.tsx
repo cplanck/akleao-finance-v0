@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { TrendingUp } from "lucide-react";
 
 function getTimeAgo(date: Date): string {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
