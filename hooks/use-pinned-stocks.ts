@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "@/lib/auth-client";
 
 interface PinnedStock {
   symbol: string;
@@ -7,34 +6,50 @@ interface PinnedStock {
   pinned_at: Date;
 }
 
+const PINNED_STOCKS_KEY = "pinnedStocks";
+
+// Helper functions for localStorage
+const getPinnedStocksFromStorage = (): PinnedStock[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(PINNED_STOCKS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const savePinnedStocksToStorage = (stocks: PinnedStock[]) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PINNED_STOCKS_KEY, JSON.stringify(stocks));
+  } catch (error) {
+    console.error("Failed to save pinned stocks:", error);
+  }
+};
+
 export function usePinnedStocks() {
-  const { data: session } = useSession();
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["pinnedStocks", session?.user?.id],
+    queryKey: ["pinnedStocks"],
     queryFn: async () => {
-      const response = await fetch("/api/pinned-stocks");
-      if (!response.ok) {
-        throw new Error("Failed to fetch pinned stocks");
-      }
-      const data = await response.json();
-      return data.pinnedStocks as PinnedStock[];
+      // Use localStorage for now until authentication is fully set up
+      return getPinnedStocksFromStorage();
     },
-    enabled: !!session?.user,
   });
 
   const pinMutation = useMutation({
     mutationFn: async (symbol: string) => {
-      const response = await fetch("/api/pinned-stocks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol }),
-      });
-      if (!response.ok) {
-        throw new Error("Failed to pin stock");
-      }
-      return response.json();
+      const currentStocks = getPinnedStocksFromStorage();
+      const newStock: PinnedStock = {
+        symbol: symbol.toUpperCase(),
+        position: currentStocks.length,
+        pinned_at: new Date(),
+      };
+      const updatedStocks = [...currentStocks, newStock];
+      savePinnedStocksToStorage(updatedStocks);
+      return newStock;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pinnedStocks"] });
@@ -43,13 +58,12 @@ export function usePinnedStocks() {
 
   const unpinMutation = useMutation({
     mutationFn: async (symbol: string) => {
-      const response = await fetch(`/api/pinned-stocks?symbol=${symbol}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to unpin stock");
-      }
-      return response.json();
+      const currentStocks = getPinnedStocksFromStorage();
+      const updatedStocks = currentStocks.filter(
+        (stock) => stock.symbol !== symbol.toUpperCase()
+      );
+      savePinnedStocksToStorage(updatedStocks);
+      return { symbol };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pinnedStocks"] });

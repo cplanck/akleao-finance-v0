@@ -5,12 +5,16 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Activity, Search } from "lucide-react"
+import { Activity, Search, TrendingUp } from "lucide-react"
 import { MarketStatus } from "@/components/market-status"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001"
 
-export function SiteHeader() {
+interface SiteHeaderProps {
+  onSimulateClick?: () => void;
+}
+
+export function SiteHeader({ onSimulateClick }: SiteHeaderProps = {}) {
   const [stats, setStats] = useState<{ total_posts: number; tracked_posts: number } | null>(null)
 
   useEffect(() => {
@@ -59,6 +63,16 @@ export function SiteHeader() {
           >
             <Search className="h-4 w-4" />
           </Button>
+          {onSimulateClick && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onSimulateClick}
+            >
+              <TrendingUp className="h-4 w-4" />
+            </Button>
+          )}
           <MarketStatus />
         </div>
       </div>

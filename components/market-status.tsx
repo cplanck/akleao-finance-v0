@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Info } from "lucide-react";
 
 interface MarketStatusData {
   market: "open" | "closed" | "extended-hours";
@@ -137,14 +139,87 @@ export function MarketStatus() {
 
   if (!statusInfo) return null;
 
+  const formatCurrentTime = () => {
+    const now = new Date();
+    return now.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short'
+    });
+  };
+
+  const isOpen = status?.market === "open";
+  const isPreMarket = status?.earlyHours;
+  const isAfterHours = status?.afterHours;
+
   return (
-    <div className="flex items-center gap-2 text-sm group">
-      <Badge className={`text-xs font-semibold transition-all duration-300 ${statusInfo.badgeClass}`}>
-        {statusInfo.status}
-      </Badge>
-      <span className="text-muted-foreground hidden sm:inline font-medium transition-colors duration-300 group-hover:text-foreground/80">
-        {statusInfo.message}
-      </span>
-    </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Badge className={`text-xs font-semibold transition-all duration-300 cursor-pointer flex items-center gap-1.5 ${statusInfo.badgeClass}`}>
+          {statusInfo.status}
+          <Info className="h-3 w-3 opacity-70 hover:opacity-100 transition-opacity" />
+        </Badge>
+      </PopoverTrigger>
+      <PopoverContent className="w-72" align="end">
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-semibold text-sm mb-1">Market Status</h4>
+            <p className={`text-sm font-medium ${statusInfo.color}`}>
+              {statusInfo.status}
+            </p>
+          </div>
+
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Current Time</span>
+              <span className="font-medium">{formatCurrentTime()}</span>
+            </div>
+
+            <div className="border-t pt-2 space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Pre-Market</span>
+                <span className="font-medium">4:00 AM - 9:30 AM ET</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Regular Hours</span>
+                <span className="font-medium">9:30 AM - 4:00 PM ET</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">After Hours</span>
+                <span className="font-medium">4:00 PM - 8:00 PM ET</span>
+              </div>
+            </div>
+
+            {isOpen && (
+              <div className="border-t pt-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Market Closes</span>
+                  <span className="font-medium">4:00 PM ET</span>
+                </div>
+              </div>
+            )}
+
+            {isPreMarket && (
+              <div className="border-t pt-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Market Opens</span>
+                  <span className="font-medium">9:30 AM ET</span>
+                </div>
+              </div>
+            )}
+
+            {isAfterHours && (
+              <div className="border-t pt-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Extended Hours End</span>
+                  <span className="font-medium">8:00 PM ET</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

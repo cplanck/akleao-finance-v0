@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request, Cookie
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,7 +19,7 @@ from shared.models.user import User
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # HTTP Bearer token
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
@@ -58,12 +58,36 @@ def decode_access_token(token: str) -> dict:
         )
 
 
+def get_token_from_request(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> str:
+    """
+    Extract JWT token from either cookie or Authorization header.
+    Prioritizes cookie-based auth (Better Auth) over Bearer token.
+    """
+    # First, try to get token from Better Auth session cookie
+    better_auth_token = request.cookies.get("better-auth.session_token")
+    if better_auth_token:
+        return better_auth_token
+
+    # Fallback to Authorization header
+    if credentials:
+        return credentials.credentials
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    token: str = Depends(get_token_from_request)
 ) -> User:
-    """Get the current authenticated user."""
-    token = credentials.credentials
+    """Get the current authenticated user from JWT (cookie or header)."""
     payload = decode_access_token(token)
 
     user_id: str = payload.get("sub")

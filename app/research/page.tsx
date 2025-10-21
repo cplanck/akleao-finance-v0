@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 function getTimeAgo(date: Date): string {
@@ -117,25 +116,12 @@ function ResearchContent() {
         onSelectStock={handleSelectStock}
       />
       <SidebarInset>
-        <SiteHeader />
+        <SiteHeader onSimulateClick={() => setSimulateDialogOpen(true)} />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-1.5">
             <div className="flex flex-col gap-2 py-2 md:gap-3 md:py-3">
               {/* Main Content */}
               <div className="px-3 lg:px-4 space-y-3">
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setSimulateDialogOpen(true)}
-            className="gap-1.5"
-          >
-            <TrendingUp className="h-4 w-4" />
-            Simulate Position
-          </Button>
-        </div>
-
         {/* Chart and Reddit/Research - 50/50 Split */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 lg:gap-3">
           {/* Chart */}

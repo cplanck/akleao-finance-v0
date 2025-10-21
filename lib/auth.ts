@@ -8,6 +8,20 @@ export const auth = betterAuth({
       rejectUnauthorized: false
     } : undefined
   }),
+  // JWT Configuration - use same secret as FastAPI
+  secret: process.env.BETTER_AUTH_SECRET || process.env.JWT_SECRET_KEY!,
+  session: {
+    // Use JWT instead of session tokens
+    jwt: {
+      enabled: true,
+      expiresIn: 60 * 60 * 24, // 24 hours (same as FastAPI)
+    },
+    // Cookie configuration
+    cookieCache: {
+      enabled: true,
+      maxAge: 60 * 60 * 24, // 24 hours
+    },
+  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -31,6 +45,7 @@ export const auth = betterAuth({
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:3002",
+    "http://localhost:8001", // Add FastAPI backend
     "https://akleao-finance-v0.vercel.app",
     "https://akleao-finance-v0-pj4dlb12x-cplancks-projects.vercel.app"
   ],
