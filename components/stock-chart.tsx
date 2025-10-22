@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -43,17 +43,28 @@ export default function StockChart({
   isLiveUpdating = false
 }: StockChartProps) {
   const [timeRange, setTimeRange] = useState("1M");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["chart", symbol, timeRange],
     queryFn: () => {
-      if (timeRange === "1D") {
-        return fetchIntradayData(symbol);
+      if (timeRange === "1D" || timeRange === "LIVE") {
+        return fetchIntradayData(symbol, timeRange);
       }
-      const days = timeRange === "1W" ? 7 : timeRange === "1M" ? 30 : timeRange === "3M" ? 90 : 365;
+      const days = timeRange === "1W" ? 7 : timeRange === "1M" ? 30 : timeRange === "1Y" ? 365 : timeRange === "All" ? 1825 : 365; // All = 5 years
       return fetchDailyData(symbol, days);
     },
+    refetchInterval: timeRange === "LIVE" ? 1000 : false, // Poll every second in LIVE mode
   });
+
+  // Trigger blink animation when data updates in LIVE mode
+  useEffect(() => {
+    if (timeRange === "LIVE" && data) {
+      setIsRefreshing(true);
+      const timeout = setTimeout(() => setIsRefreshing(false), 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [data, timeRange]);
 
   // Calculate appropriate tick interval for X-axis based on data length
   // Also returns indices to show (excluding first and last)
@@ -63,8 +74,12 @@ export default function StockChart({
     const dataLength = data.length;
     let interval = Math.ceil(dataLength / 10);
 
+    // For live (1m intervals, ~60 points), show ~6 ticks
+    if (timeRange === "LIVE") {
+      interval = Math.ceil(dataLength / 6);
+    }
     // For intraday (1D), show ~8-10 ticks
-    if (timeRange === "1D") {
+    else if (timeRange === "1D") {
       interval = Math.ceil(dataLength / 10);
     }
     // For 1 week (15m intervals, ~200 points), show ~10 ticks
@@ -75,12 +90,12 @@ export default function StockChart({
     else if (timeRange === "1M") {
       interval = Math.ceil(dataLength / 10);
     }
-    // For 3 months (daily, ~65 points), show ~10 ticks
-    else if (timeRange === "3M") {
-      interval = Math.ceil(dataLength / 10);
-    }
     // For 1 year (daily, ~250 points), show ~12 ticks (monthly)
     else if (timeRange === "1Y") {
+      interval = Math.ceil(dataLength / 12);
+    }
+    // For All (5 years, daily, ~1250 points), show ~12 ticks (yearly)
+    else if (timeRange === "All") {
       interval = Math.ceil(dataLength / 12);
     }
 
@@ -148,11 +163,6 @@ export default function StockChart({
                     </span>
                   )}
                   {`$${quote?.price.toFixed(2)}`}
-                  {quote?.marketSession === "post" && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-semibold">
-                      After Hours
-                    </span>
-                  )}
                   {quote?.marketSession === "pre" && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold">
                       Pre-Market
@@ -193,7 +203,7 @@ export default function StockChart({
             </div>
           ) : (
             <ChartContainer config={chartConfig} className="h-full w-full">
-            <AreaChart data={data || []} margin={{ left: 0, right: 0, top: 5, bottom: 0 }}>
+            <AreaChart data={data || []} margin={{ left: 0, right: timeRange === "LIVE" ? 7 : 0, top: 5, bottom: 0 }}>
             <defs>
               <linearGradient id="fillPrice" x1="0" y1="0" x2="0" y2="1">
                 <stop
@@ -220,8 +230,8 @@ export default function StockChart({
               tickMargin={12}
               ticks={getTicksToShow().map(i => data?.[i]?.date).filter((d): d is string => d !== undefined)}
               tickFormatter={(value) => {
-                // For 1D: show time as is (e.g., "10:30 AM")
-                if (timeRange === "1D") {
+                // For LIVE and 1D: show time as is (e.g., "10:30 AM")
+                if (timeRange === "LIVE" || timeRange === "1D") {
                   return value;
                 }
                 // For 1W and 1M: value is "Oct 10 10:30 AM", show just "Oct 10"
@@ -243,6 +253,8 @@ export default function StockChart({
               hide
             />
             <ChartTooltip
+              cursor={{ strokeDasharray: "3 3" }}
+              offset={50}
               content={
                 <ChartTooltipContent
                   formatter={(value) => `$${Number(value).toFixed(2)}`}
@@ -255,7 +267,52 @@ export default function StockChart({
               stroke="var(--color-price)"
               fill="url(#fillPrice)"
               strokeWidth={2.5}
-              dot={false}
+              animationDuration={timeRange === "LIVE" ? 200 : 800}
+              dot={(props: any) => {
+                // Show dot at the very end in LIVE mode
+                const dotIndex = (data?.length || 0) - 1;
+                if (timeRange === "LIVE" && props.index === dotIndex && dotIndex >= 0) {
+                  return (
+                    <>
+                      {/* Ping animation ring - only when refreshing, rendered behind */}
+                      {isRefreshing && (
+                        <circle
+                          cx={props.cx}
+                          cy={props.cy}
+                          r={8}
+                          fill="var(--color-price)"
+                          className="animate-ping"
+                          opacity={0.5}
+                        />
+                      )}
+                      {/* Pulsing outer glow ring - pulses when refreshing */}
+                      <circle
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={isRefreshing ? 9 : 7}
+                        fill="var(--color-price)"
+                        opacity={isRefreshing ? 0.5 : 0.3}
+                        style={{
+                          transition: 'all 0.2s ease-out',
+                          filter: isRefreshing ? 'blur(2px)' : 'blur(1px)',
+                        }}
+                      />
+                      {/* Main dot - completely static, always on top, never changes */}
+                      <circle
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={4}
+                        fill="var(--color-price)"
+                        opacity={1}
+                        style={{
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    </>
+                  );
+                }
+                return null;
+              }}
               activeDot={{
                 r: 6,
                 style: { fill: "var(--color-price)", opacity: 0.8 },
@@ -269,7 +326,17 @@ export default function StockChart({
         {/* Time Range Tabs - Bottom */}
         <div className="flex justify-center mt-2">
           <Tabs value={timeRange} onValueChange={setTimeRange}>
-            <TabsList className="grid grid-cols-5 bg-muted/50 backdrop-blur-sm p-0.5 rounded-xl border border-primary/5">
+            <TabsList className="grid grid-cols-6 bg-muted/50 backdrop-blur-sm p-0.5 rounded-xl border border-primary/5">
+              <TabsTrigger
+                value="LIVE"
+                className="text-xs px-2 data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-500 data-[state=active]:to-green-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300 flex items-center gap-1"
+              >
+                <span className={timeRange === "LIVE" ? "relative flex h-2 w-2" : "hidden"}>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                </span>
+                Live
+              </TabsTrigger>
               <TabsTrigger
                 value="1D"
                 className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
@@ -289,16 +356,16 @@ export default function StockChart({
                 1M
               </TabsTrigger>
               <TabsTrigger
-                value="3M"
-                className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
-              >
-                3M
-              </TabsTrigger>
-              <TabsTrigger
                 value="1Y"
                 className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
               >
                 1Y
+              </TabsTrigger>
+              <TabsTrigger
+                value="All"
+                className="text-xs px-3 data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+              >
+                All
               </TabsTrigger>
             </TabsList>
           </Tabs>

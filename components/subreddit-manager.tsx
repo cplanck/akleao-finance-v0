@@ -107,7 +107,8 @@ export function SubredditManager({ symbol, companyName }: SubredditManagerProps)
     try {
       setIsTracking(subredditName);
       setError(null);
-      const response = await fetch(`${API_URL}/api/reddit/track`, {
+      // Call Next.js API route which forwards to backend
+      const response = await fetch(`/api/reddit/track`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -116,7 +117,10 @@ export function SubredditManager({ symbol, companyName }: SubredditManagerProps)
           relevance_score: relevanceScore,
         }),
       });
-      if (!response.ok) throw new Error("Failed to track subreddit");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || errorData.error || "Failed to track subreddit");
+      }
 
       // Refresh tracked list
       await loadTrackedSubreddits();

@@ -25,8 +25,12 @@ export async function GET(request: Request) {
     // Calculate date range and interval based on the range parameter
     // Use granular intervals for shorter periods to show maximum data points
     switch (range) {
+      case "LIVE":
+        from.setHours(from.getHours() - 1); // Last 1 hour
+        interval = "1m"; // 1-minute intervals for live view
+        break;
       case "1D":
-        from.setDate(from.getDate() - 2);
+        from.setDate(from.getDate() - 1); // Last 24 hours
         interval = "5m"; // 5-minute intervals for intraday
         break;
       case "1W":
@@ -63,8 +67,10 @@ export async function GET(request: Request) {
       const isIntraday = interval.endsWith("m");
 
       // For very short intraday periods, limit to reasonable number of points
-      if (interval === "5m") {
-        quotes = quotes.slice(-78); // Last 78 points (full trading day)
+      if (interval === "1m") {
+        quotes = quotes.slice(-60); // Last 60 points (1 hour at 1-min intervals)
+      } else if (interval === "5m") {
+        quotes = quotes.slice(-288); // Last 288 points (24 hours at 5-min intervals)
       } else if (interval === "15m") {
         // 15-min intervals: ~26 points per day, keep last ~200 points for week view
         quotes = quotes.slice(-200);
@@ -77,8 +83,8 @@ export async function GET(request: Request) {
         const date = new Date(q.date);
         let formattedDate: string;
 
-        if (interval === "5m") {
-          // For 1 day view: just show time
+        if (interval === "1m" || interval === "5m") {
+          // For live/1 day view: just show time
           formattedDate = date.toLocaleTimeString("en-US", {
             hour: "2-digit",
             minute: "2-digit",

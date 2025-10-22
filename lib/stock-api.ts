@@ -122,9 +122,9 @@ export async function fetchStockOverview(symbol: string): Promise<StockOverview>
 }
 
 // Fetch intraday chart data (1 day, 5-minute intervals)
-export async function fetchIntradayData(symbol: string): Promise<ChartDataPoint[]> {
+export async function fetchIntradayData(symbol: string, range: string = "1D"): Promise<ChartDataPoint[]> {
   try {
-    const response = await fetch(`/api/stock/chart?symbol=${symbol}&range=1D`);
+    const response = await fetch(`/api/stock/chart?symbol=${symbol}&range=${range}`);
 
     if (!response.ok) {
       throw new Error("Failed to fetch chart data");
@@ -133,7 +133,7 @@ export async function fetchIntradayData(symbol: string): Promise<ChartDataPoint[
     return await response.json();
   } catch (error) {
     console.error("Error fetching intraday data:", error);
-    return generateMockData(78, symbol);
+    return generateMockData(range === "LIVE" ? 60 : 78, symbol);
   }
 }
 

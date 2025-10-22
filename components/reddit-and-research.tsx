@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, FileText, TrendingUp, ExternalLink, Loader2, Settings, Sparkles, Brain, Zap, TrendingDown, Minus, BarChart3 } from "lucide-react";
+import { MessageSquare, FileText, TrendingUp, ExternalLink, Loader2, Sparkles, Brain, Zap, TrendingDown, Minus, BarChart3 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ResearchGenerator } from "@/components/research-generator";
@@ -130,7 +130,11 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
     fetch(`/api/stock/reddit?symbol=${symbol}&limit=10`)
       .then(res => res.json())
       .then(data => {
-        setPosts(data.posts || []);
+        // Sort posts by posted_at timestamp, newest first
+        const sortedPosts = (data.posts || []).sort((a: RedditPost, b: RedditPost) => {
+          return new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime();
+        });
+        setPosts(sortedPosts);
         setTotal(data.total || 0);
       })
       .catch(err => {
@@ -202,7 +206,6 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
         <CardHeader className="pb-2 px-3 pt-3 relative z-10 shrink-0 min-h-[56px]">
           <div className="flex items-center justify-between h-full">
             <div className="flex items-center gap-2 min-h-[28px]">
-              <CardTitle className="text-sm">Community & Research</CardTitle>
               {total > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {total} posts
@@ -217,19 +220,15 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
             <TabsList className="h-7">
               <TabsTrigger value="ai-summary" className="text-xs gap-1.5 px-2">
                 <BarChart3 className="h-3 w-3" />
-                <span className="hidden sm:inline">AI Summary</span>
+                <span className="hidden xl:inline">AI Summary</span>
               </TabsTrigger>
               <TabsTrigger value="research" className="text-xs gap-1.5 px-2">
                 <FileText className="h-3 w-3" />
-                <span className="hidden sm:inline">Deep Research</span>
+                <span className="hidden xl:inline">Deep Research</span>
               </TabsTrigger>
               <TabsTrigger value="reddit" className="text-xs gap-1.5 px-2">
                 <MessageSquare className="h-3 w-3" />
-                <span className="hidden sm:inline">Reddit</span>
-              </TabsTrigger>
-              <TabsTrigger value="manage" className="text-xs gap-1.5 px-2">
-                <Settings className="h-3 w-3" />
-                <span className="hidden sm:inline">Manage</span>
+                <span className="hidden xl:inline">Reddit</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -268,9 +267,6 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
               <div className="text-center py-8 space-y-3">
                 <p className="text-sm text-muted-foreground">
                   No Reddit discussions found for ${symbol}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Track subreddits in the <strong>Manage</strong> tab to start collecting posts
                 </p>
               </div>
             )}
@@ -366,11 +362,6 @@ export function RedditAndResearch({ symbol }: RedditAndResearchProps) {
                 </div>
               );
             })}
-          </TabsContent>
-
-          {/* Manage Subreddits Tab */}
-          <TabsContent value="manage" className="mt-0 flex-1 overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
-            <SubredditManager symbol={symbol} companyName={symbol} />
           </TabsContent>
         </CardContent>
       </Card>
