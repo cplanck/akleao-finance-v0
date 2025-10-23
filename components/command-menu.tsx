@@ -259,7 +259,7 @@ export function CommandMenu({ open, onOpenChange, onSelectStock }: CommandMenuPr
         </div>
 
         {/* Results */}
-        <Command.List className="max-h-[400px] overflow-y-auto p-2">
+        <Command.List className="h-[400px] overflow-y-auto p-2">
           <Command.Empty className="py-8 text-center text-sm text-muted-foreground">
             No stocks found.
           </Command.Empty>

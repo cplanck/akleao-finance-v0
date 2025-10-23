@@ -103,9 +103,9 @@ export default function MetricCardWithAI({
 
   return (
     <Card className="relative group">
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-1.5">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+          <CardTitle className="text-xs font-medium text-muted-foreground">
             {label}
           </CardTitle>
           <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -113,9 +113,9 @@ export default function MetricCardWithAI({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 w-6 p-0 opacity-0 sm:group-hover:opacity-100 sm:transition-opacity sm:opacity-0 opacity-60"
+                className="h-5 w-5 p-0 opacity-0 sm:group-hover:opacity-100 sm:transition-opacity sm:opacity-0 opacity-60"
               >
-                <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
+                <Sparkles className="h-3 w-3 text-blue-500" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 md:w-96" align="end" side="top" sideOffset={5}>
@@ -173,20 +173,20 @@ export default function MetricCardWithAI({
           </Popover>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          <div className="text-xl sm:text-2xl font-bold">{value}</div>
+      <CardContent className="pb-3">
+        <div className="space-y-1.5">
+          <div className="text-lg sm:text-xl font-bold">{value}</div>
           <p className="text-xs text-muted-foreground line-clamp-2">{description}</p>
           {analysis && (
             <Badge
               variant="outline"
               className={cn(
-                "text-[10px] sm:text-xs font-normal gap-1 flex items-center w-fit",
+                "text-[10px] font-normal gap-1 flex items-center w-fit",
                 sentimentConfig.className
               )}
             >
               {sentimentConfig.icon && (
-                <sentimentConfig.icon className="h-3 w-3" />
+                <sentimentConfig.icon className="h-2.5 w-2.5" />
               )}
               <span className="line-clamp-1">{analysis.brief}</span>
             </Badge>

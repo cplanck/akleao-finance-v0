@@ -17,14 +17,16 @@ export async function POST(request: Request) {
     }
 
     const systemPrompt = detailed
-      ? "You are a helpful financial advisor explaining stock metrics to beginners. Provide a comprehensive explanation (4-6 sentences) with examples and context. Explain how investors use this metric and what factors influence it."
-      : "You are a helpful financial advisor explaining stock metrics to beginners. Keep explanations VERY concise (maximum 2 sentences). Be direct and practical.";
+      ? "You are a helpful financial advisor explaining stock metrics to beginners. Provide a comprehensive explanation (4-6 sentences) with examples and context. Explain how investors use this metric and what factors influence it. Use specific numbers from the stock data to make it concrete and relatable."
+      : "You are a helpful financial advisor explaining stock metrics to beginners. Keep explanations VERY concise (maximum 2 sentences). Be direct, practical, and use the actual numbers provided to make it human-readable. For example, instead of explaining P/E ratio abstractly, say 'this means you pay $X for every $1 of earnings'.";
 
     const userPrompt = detailed
       ? `Provide a detailed explanation of "${metric}" in stock investing. The current value is ${value}${
-          context ? `. Stock: ${context}` : ""
-        }. Explain what this metric measures, what this specific value means, and how investors should interpret it.`
-      : `Briefly explain "${metric}" in stock investing. The current value is ${value}. What does this mean in 2 sentences max?`;
+          context ? ` for ${context}` : ""
+        }. Explain what this metric measures, what this specific value means, and how investors should interpret it. Use the actual numbers in your explanation.`
+      : `Briefly explain what "${metric}" of ${value} means${
+          context ? ` for ${context}` : ""
+        }. Use the actual value to explain in concrete, human-readable terms. Maximum 2 sentences.`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",

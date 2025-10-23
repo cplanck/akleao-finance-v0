@@ -25,6 +25,7 @@ import { TrendingUp, X } from "lucide-react";
 import { usePolygonWebSocket } from "@/hooks/use-polygon-websocket";
 import { usePinnedStocks } from "@/hooks/use-pinned-stocks";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 function getTimeAgo(date: Date): string {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
@@ -175,28 +176,27 @@ function ResearchContent() {
                 <div className="lg:hidden px-3">
                   <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
                     {pinnedStocks.map((stock) => (
-                      <Badge
+                      <div
                         key={stock.symbol}
-                        variant={selectedStock === stock.symbol ? "default" : "outline"}
                         className={cn(
-                          "flex-shrink-0 cursor-pointer transition-all duration-200 group relative px-3 py-1.5",
+                          "flex-shrink-0 cursor-pointer transition-all duration-200 group relative rounded-lg border",
                           selectedStock === stock.symbol
-                            ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                            : "hover:bg-muted"
+                            ? "bg-primary/10 border-primary/30 shadow-md"
+                            : "bg-card/50 border-border/40 hover:border-primary/20 hover:bg-muted/50"
                         )}
                         onClick={() => handleSelectStock(stock.symbol)}
                       >
-                        <span className="font-semibold text-sm">{stock.symbol}</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            unpin(stock.symbol);
-                          }}
-                          className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
+                        <div className="flex items-center px-2.5 py-1.5">
+                          <span className={cn(
+                            "font-bold text-xs tracking-tight",
+                            selectedStock === stock.symbol
+                              ? "text-primary"
+                              : "text-foreground"
+                          )}>
+                            {stock.symbol}
+                          </span>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -322,19 +322,19 @@ function ResearchContent() {
                   )}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
-                  <div className="p-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md h-[52px]">
+                  <div className="py-2.5 px-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md flex flex-col justify-center">
                     <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">Sector</span>
                     <p className="font-bold text-sm mt-0.5">{overview.sector}</p>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md h-[52px]">
+                  <div className="py-2.5 px-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md flex flex-col justify-center">
                     <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">Industry</span>
                     <p className="font-bold text-sm mt-0.5">{overview.industry}</p>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md h-[52px]">
+                  <div className="py-2.5 px-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md flex flex-col justify-center">
                     <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">Employees</span>
                     <p className="font-bold text-sm font-mono tabular-nums mt-0.5">{overview.employees}</p>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md h-[52px]">
+                  <div className="py-2.5 px-2.5 rounded-lg bg-muted/30 backdrop-blur-sm border border-primary/5 hover:border-primary/20 transition-all duration-300 hover:shadow-md flex flex-col justify-center">
                     <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">Market Cap</span>
                     <p className="font-bold text-sm font-mono tabular-nums mt-0.5">{overview.marketCap}</p>
                   </div>

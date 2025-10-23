@@ -22,13 +22,13 @@ export async function POST(request: Request) {
         {
           role: "system",
           content:
-            'You are a financial analyst providing brief assessments. Return ONLY a JSON object with three fields: "sentiment" (must be exactly "positive", "negative", or "neutral"), "brief" (3-5 words max explaining if good/bad), and "reason" (one short sentence explaining why).',
+            'You are a financial analyst providing brief, contextual assessments. Return ONLY a JSON object with three fields: "sentiment" (must be exactly "positive", "negative", or "neutral"), "brief" (3-5 words max using actual numbers where helpful), and "reason" (one short sentence explaining why with concrete details).',
         },
         {
           role: "user",
           content: `Analyze this stock metric: "${metric}" with value ${value}${
             context ? ` for ${context}` : ""
-          }. Is this good, bad, or neutral for investors?`,
+          }. Is this good, bad, or neutral for investors? Use the specific value in your brief assessment.`,
         },
       ],
       temperature: 0.3,

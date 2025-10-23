@@ -89,22 +89,6 @@ export default function HomePage() {
           <div ref={containerRef} className="@container/main flex flex-1 flex-col gap-1.5 overflow-y-auto pb-20 md:pb-0">
             <div className="flex flex-col gap-2 py-2 md:gap-3 md:py-3">
               <div className="px-3 lg:px-4 space-y-4">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">
-                      For You
-                    </h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Curated discussions based on recent activity
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="text-muted-foreground">Personalized</span>
-                  </div>
-                </div>
-
                 {/* Posts Grid */}
                 {isLoading ? (
                   <div className="space-y-3">
