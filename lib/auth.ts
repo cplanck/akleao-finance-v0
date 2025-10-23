@@ -30,6 +30,8 @@ export const auth = betterAuth({
       // Force account selection screen on every login
       authorizationParams: {
         prompt: "select_account",
+        // Additional parameter to prevent auto-login
+        max_age: "0",
       },
       mapProfileToUser: (profile) => {
         console.log("Google profile data:", profile);
