@@ -27,6 +27,10 @@ export const auth = betterAuth({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       scopes: ["openid", "email", "profile"],
+      // Force account selection screen on every login
+      authorizationParams: {
+        prompt: "select_account",
+      },
       mapProfileToUser: (profile) => {
         console.log("Google profile data:", profile);
         const user = {
