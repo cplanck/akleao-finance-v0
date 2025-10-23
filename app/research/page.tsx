@@ -21,8 +21,10 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, X } from "lucide-react";
 import { usePolygonWebSocket } from "@/hooks/use-polygon-websocket";
+import { usePinnedStocks } from "@/hooks/use-pinned-stocks";
+import { Badge } from "@/components/ui/badge";
 
 function getTimeAgo(date: Date): string {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
@@ -39,6 +41,7 @@ function getTimeAgo(date: Date): string {
 function ResearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { pinnedStocks, unpin } = usePinnedStocks();
 
   // Get stock from URL, default to AAPL
   const stockFromUrl = searchParams.get("symbol") || "AAPL";
@@ -167,6 +170,38 @@ function ResearchContent() {
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-1.5 pb-20 md:pb-0">
             <div className="flex flex-col gap-2 py-2 md:gap-3 md:py-3">
+              {/* Pinned Stocks Row - Mobile Only */}
+              {pinnedStocks.length > 0 && (
+                <div className="lg:hidden px-3">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {pinnedStocks.map((stock) => (
+                      <Badge
+                        key={stock.symbol}
+                        variant={selectedStock === stock.symbol ? "default" : "outline"}
+                        className={cn(
+                          "flex-shrink-0 cursor-pointer transition-all duration-200 group relative px-3 py-1.5",
+                          selectedStock === stock.symbol
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                            : "hover:bg-muted"
+                        )}
+                        onClick={() => handleSelectStock(stock.symbol)}
+                      >
+                        <span className="font-semibold text-sm">{stock.symbol}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            unpin(stock.symbol);
+                          }}
+                          className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Main Content */}
               <div className="px-3 lg:px-4 space-y-3">
         {/* Chart and Reddit/Research - 50/50 Split */}
