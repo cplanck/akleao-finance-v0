@@ -1,8 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Activity, Search, TrendingUp } from "lucide-react"
@@ -40,7 +38,6 @@ export function SiteHeader({ onSimulateClick }: SiteHeaderProps = {}) {
     <header className="group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 flex h-12 sm:h-14 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear">
       <div className="flex w-full items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 lg:gap-6 lg:px-6">
         <div className="flex items-center gap-2">
-          <SidebarTrigger className="-ml-1 md:hidden" />
           <Badge variant="outline" className="text-[10px] sm:text-xs flex items-center gap-1">
             <Activity className="h-3 w-3 animate-pulse" />
             {stats ? `Tracking ${stats.tracked_posts.toLocaleString()} posts` : "Loading..."}
