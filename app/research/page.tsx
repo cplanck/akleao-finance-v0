@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { TrendingUp } from "lucide-react";
+import { usePolygonWebSocket } from "@/hooks/use-polygon-websocket";
 
 function getTimeAgo(date: Date): string {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
@@ -79,18 +80,62 @@ function ResearchContent() {
     return () => clearInterval(interval);
   }, []);
 
-  // Determine if we should poll for live prices
-  const shouldPollPrice = marketStatus?.market === "open" || marketStatus?.afterHours || marketStatus?.earlyHours;
+  // Determine if we should use live WebSocket prices
+  const shouldUseLivePrice = marketStatus?.market === "open" || marketStatus?.afterHours || marketStatus?.earlyHours;
 
   const { data: quote, isLoading: quoteLoading, dataUpdatedAt: quoteUpdatedAt, isFetching: quoteFetching } = useQuery({
     queryKey: ["quote", selectedStock],
     queryFn: () => fetchStockQuote(selectedStock),
-    refetchInterval: shouldPollPrice ? 2000 : false, // Poll every 2 seconds during market hours
+    // Poll every 2 seconds when market is open (WebSocket disabled due to subscription requirements)
+    refetchInterval: shouldUseLivePrice ? 2000 : false,
+    staleTime: 2000,
   });
 
   const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ["overview", selectedStock],
     queryFn: () => fetchStockOverview(selectedStock),
+  });
+
+  const queryClient = useQueryClient();
+
+  // Throttle WebSocket updates to avoid too many re-renders
+  const lastUpdateRef = useRef<number>(0);
+  const updateThrottleMs = 1000; // Update UI at most once per second
+
+  // Use WebSocket for live price updates during market hours
+  const { latestTrade, isConnected } = usePolygonWebSocket({
+    symbol: selectedStock,
+    enabled: false, // Disabled: Polygon WebSocket requires paid subscription
+    onTrade: (trade) => {
+      const now = Date.now();
+
+      // Throttle updates to prevent too many re-renders
+      if (now - lastUpdateRef.current < updateThrottleMs) {
+        return;
+      }
+      lastUpdateRef.current = now;
+
+      // Update the quote in the cache with the latest trade price
+      queryClient.setQueryData(["quote", selectedStock], (oldQuote: any) => {
+        if (!oldQuote) return oldQuote;
+
+        // Use the previous day's close as the reference price for change calculation
+        const referencePrice = oldQuote.regularMarket?.price || oldQuote.price;
+        const newPrice = trade.price;
+        const change = newPrice - referencePrice;
+        const changePercent = (change / referencePrice) * 100;
+
+        return {
+          ...oldQuote,
+          price: newPrice,
+          change,
+          changePercent,
+        };
+      });
+
+      // Update the data fetched timestamp
+      setDataFetchedAt(new Date(trade.timestamp));
+    },
   });
 
   // Update dataFetchedAt when quote data is fetched
@@ -133,7 +178,7 @@ function ResearchContent() {
               overview={overview}
               quoteLoading={quoteLoading}
               overviewLoading={overviewLoading}
-              isLiveUpdating={shouldPollPrice && quoteFetching}
+              isLiveUpdating={shouldUseLivePrice && isConnected}
             />
           </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,6 +8,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { fetchDailyData, fetchIntradayData } from "@/lib/stock-api";
 import { PinButton } from "@/components/pin-button";
+import { usePolygonWebSocket } from "@/hooks/use-polygon-websocket";
 
 interface StockChartProps {
   symbol: string;
@@ -44,27 +45,105 @@ export default function StockChart({
 }: StockChartProps) {
   const [timeRange, setTimeRange] = useState("1M");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [liveChartData, setLiveChartData] = useState<{ date: string; price: number }[]>([]);
+  const liveDataBufferRef = useRef<{ date: string; price: number }[]>([]);
+  const maxLivePoints = 60; // Keep last 60 trades
 
-  const { data, isLoading } = useQuery({
+  // WebSocket for LIVE mode with throttling
+  const lastChartUpdateRef = useRef<number>(0);
+  const pendingTradeRef = useRef<{ price: number; timestamp: number } | null>(null);
+  const chartUpdateThrottleMs = 1000; // Update chart once per second
+  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { isConnected, latestTrade } = usePolygonWebSocket({
+    symbol,
+    enabled: false, // Disabled: Polygon WebSocket requires paid subscription
+    onTrade: (trade) => {
+      // Store the latest trade without triggering re-renders
+      pendingTradeRef.current = trade;
+    },
+  });
+
+  // Batch chart updates using an interval
+  useEffect(() => {
+    if (timeRange !== "LIVE") {
+      return;
+    }
+
+    const updateInterval = setInterval(() => {
+      const trade = pendingTradeRef.current;
+      if (!trade) return; // No new trade data
+
+      const timestamp = new Date(trade.timestamp);
+      const timeString = timestamp.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      });
+
+      const newDataPoint = {
+        date: timeString,
+        price: trade.price,
+      };
+
+      // Update buffer and state
+      const newBuffer = [...liveDataBufferRef.current, newDataPoint].slice(-maxLivePoints);
+      liveDataBufferRef.current = newBuffer;
+      setLiveChartData(newBuffer);
+
+      // Brief animation flash
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+      setIsRefreshing(true);
+      animationTimeoutRef.current = setTimeout(() => setIsRefreshing(false), 300);
+
+      // Clear pending trade
+      pendingTradeRef.current = null;
+    }, chartUpdateThrottleMs);
+
+    return () => {
+      clearInterval(updateInterval);
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, [timeRange]);
+
+  // Query for historical data and LIVE polling (fallback when WebSocket not connected)
+  const { data: historicalData, isLoading } = useQuery({
     queryKey: ["chart", symbol, timeRange],
     queryFn: () => {
       if (timeRange === "1D" || timeRange === "LIVE") {
         return fetchIntradayData(symbol, timeRange);
       }
-      const days = timeRange === "1W" ? 7 : timeRange === "1M" ? 30 : timeRange === "1Y" ? 365 : timeRange === "All" ? 1825 : 365; // All = 5 years
+      const days = timeRange === "1W" ? 7 : timeRange === "1M" ? 30 : timeRange === "1Y" ? 365 : timeRange === "All" ? 1825 : 365;
       return fetchDailyData(symbol, days);
     },
-    refetchInterval: timeRange === "LIVE" ? 1000 : false, // Poll every second in LIVE mode
+    // Only poll when in LIVE mode and WebSocket is NOT connected (fallback)
+    refetchInterval: timeRange === "LIVE" && !isConnected ? 2000 : false,
   });
 
-  // Trigger blink animation when data updates in LIVE mode
+  // Initialize live chart data when switching to LIVE mode
   useEffect(() => {
-    if (timeRange === "LIVE" && data) {
-      setIsRefreshing(true);
-      const timeout = setTimeout(() => setIsRefreshing(false), 300);
-      return () => clearTimeout(timeout);
+    if (timeRange === "LIVE" && historicalData && !isConnected) {
+      // Use historical data as initial data
+      const initialData = historicalData.slice(-maxLivePoints);
+      liveDataBufferRef.current = initialData;
+      setLiveChartData(initialData);
+    } else if (timeRange === "LIVE" && isConnected && liveDataBufferRef.current.length === 0) {
+      // Initialize with empty if WebSocket connected but no data yet
+      setLiveChartData([]);
+    } else if (timeRange !== "LIVE") {
+      // Clear live data when switching away from LIVE
+      liveDataBufferRef.current = [];
+      setLiveChartData([]);
     }
-  }, [data, timeRange]);
+  }, [timeRange, historicalData, isConnected]);
+
+  // Determine which data to use
+  const data = timeRange === "LIVE" && isConnected ? liveChartData : historicalData;
 
   // Calculate appropriate tick interval for X-axis based on data length
   // Also returns indices to show (excluding first and last)

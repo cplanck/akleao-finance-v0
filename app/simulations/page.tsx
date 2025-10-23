@@ -12,8 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, TrendingUp, TrendingDown, X } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Plus, TrendingUp, TrendingDown, X, XCircle, DoorOpen, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import Link from "next/link";
 import { PositionPerformanceChart } from "@/components/position-performance-chart";
 
@@ -76,6 +77,13 @@ async function closePosition(positionId: number, exitPrice: number, exitDate: st
   });
   if (!res.ok) throw new Error("Failed to close position");
   return res.json();
+}
+
+async function deletePosition(positionId: number): Promise<void> {
+  const res = await fetch(`${API_URL}/api/positions/${positionId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete position");
 }
 
 export default function SimulationsPage() {
@@ -411,6 +419,14 @@ function PositionDetailsDialog({
   onUpdate: () => void;
 }) {
   const [chartData, setChartData] = useState<any[]>([]);
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [closeFormData, setCloseFormData] = useState({
+    exit_price: "",
+    exit_date: new Date().toISOString().split("T")[0],
+  });
+
+  const queryClient = useQueryClient();
   const initialValue = position.shares * position.entry_price;
   const latestData = chartData.length > 0 ? chartData[chartData.length - 1] : null;
 
@@ -424,6 +440,46 @@ function PositionDetailsDialog({
     },
     staleTime: 5000,
     enabled: position.is_active,
+  });
+
+  // Close position mutation
+  const closeMutation = useMutation({
+    mutationFn: () => closePosition(
+      position.id,
+      parseFloat(closeFormData.exit_price),
+      `${closeFormData.exit_date}T16:00:00` // Market close time
+    ),
+    onSuccess: () => {
+      toast.success("Position Closed", {
+        description: `${position.stock_symbol} position successfully closed`,
+      });
+      setShowCloseDialog(false);
+      onUpdate();
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to Close Position", {
+        description: error.message,
+      });
+    },
+  });
+
+  // Delete position mutation
+  const deleteMutation = useMutation({
+    mutationFn: () => deletePosition(position.id),
+    onSuccess: () => {
+      toast.success("Position Deleted", {
+        description: `${position.stock_symbol} position permanently deleted`,
+      });
+      setShowDeleteDialog(false);
+      onUpdate();
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to Delete Position", {
+        description: error.message,
+      });
+    },
   });
 
   // Calculate actual gains
@@ -454,16 +510,39 @@ function PositionDetailsDialog({
   const narrative = getNarrativeComparison();
 
   return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-2xl">${position.stock_symbol} Position</DialogTitle>
-            <Badge variant={position.is_active ? "default" : "secondary"}>
-              {position.is_active ? "Active" : "Closed"}
-            </Badge>
-          </div>
-        </DialogHeader>
+    <>
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-2xl">${position.stock_symbol} Position</DialogTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant={position.is_active ? "default" : "secondary"}>
+                  {position.is_active ? "Active" : "Closed"}
+                </Badge>
+                {position.is_active && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCloseDialog(true)}
+                    className="text-xs"
+                  >
+                    <DoorOpen className="h-3 w-3 mr-1.5" />
+                    Close Position
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-3 w-3 mr-1.5" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
 
         <div className="space-y-6">
           {/* Current Price Display */}
@@ -594,5 +673,94 @@ function PositionDetailsDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Close Position Confirmation Dialog */}
+    <Dialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Close Position</DialogTitle>
+          <DialogDescription>
+            Enter the exit price and date to close this position. The position will be kept in your history.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            closeMutation.mutate();
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <Label htmlFor="exit_price">Exit Price</Label>
+            <Input
+              id="exit_price"
+              type="number"
+              step="0.01"
+              value={closeFormData.exit_price}
+              onChange={(e) => setCloseFormData({ ...closeFormData, exit_price: e.target.value })}
+              placeholder={currentQuote?.price.toFixed(2) || position.entry_price.toFixed(2)}
+              required
+            />
+            {currentQuote && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Current price: ${currentQuote.price.toFixed(2)}
+              </p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="exit_date">Exit Date</Label>
+            <Input
+              id="exit_date"
+              type="date"
+              value={closeFormData.exit_date}
+              onChange={(e) => setCloseFormData({ ...closeFormData, exit_date: e.target.value })}
+              required
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowCloseDialog(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={closeMutation.isPending}>
+              {closeMutation.isPending ? "Closing..." : "Close Position"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    {/* Delete Position Confirmation Dialog */}
+    <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete Position</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to permanently delete this position? This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 space-y-2">
+          <p className="text-sm font-semibold">{position.stock_symbol}</p>
+          <p className="text-xs text-muted-foreground">
+            {position.shares} shares @ ${position.entry_price.toFixed(2)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Opened: {new Date(position.entry_date).toLocaleDateString()}
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }
