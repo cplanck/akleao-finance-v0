@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { MobileNav } from "@/components/mobile-nav";
 import { SiteHeader } from "@/components/site-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -215,6 +216,7 @@ export default function AIAnalysesPage() {
           </Card>
         </main>
       </SidebarInset>
+          <MobileNav />
     </SidebarProvider>
   );
 }

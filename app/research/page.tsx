@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { MobileNav } from "@/components/mobile-nav";
 import { SiteHeader } from "@/components/site-header";
 import StockChart from "@/components/stock-chart";
 import KeyMetrics from "@/components/key-metrics";
@@ -164,7 +165,7 @@ function ResearchContent() {
       <SidebarInset>
         <SiteHeader onSimulateClick={() => setSimulateDialogOpen(true)} />
         <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-1.5">
+          <div className="@container/main flex flex-1 flex-col gap-1.5 pb-20 md:pb-0">
             <div className="flex flex-col gap-2 py-2 md:gap-3 md:py-3">
               {/* Main Content */}
               <div className="px-3 lg:px-4 space-y-3">
@@ -320,6 +321,7 @@ function ResearchContent() {
         symbol={selectedStock}
         currentPrice={quote?.price}
       />
+      <MobileNav />
     </SidebarProvider>
   );
 }

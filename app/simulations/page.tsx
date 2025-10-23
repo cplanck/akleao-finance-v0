@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { MobileNav } from "@/components/mobile-nav";
 import { SiteHeader } from "@/components/site-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,7 @@ export default function SimulationsPage() {
       <SidebarInset>
         <SiteHeader />
         <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-1.5">
+          <div className="@container/main flex flex-1 flex-col gap-1.5 pb-20 md:pb-0">
             <div className="flex flex-col gap-2 py-2 md:gap-3 md:py-3">
               <div className="px-3 lg:px-4 space-y-4">
                 {/* Header */}
@@ -203,6 +204,7 @@ export default function SimulationsPage() {
           }}
         />
       )}
+      <MobileNav />
     </SidebarProvider>
   );
 }

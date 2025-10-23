@@ -113,8 +113,8 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
   const logoSrc = currentTheme === "dark" ? "/logo-dark.svg" : "/logo-light.svg"
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader className="border-b border-border/50 pb-3">
+    <Sidebar collapsible="icon" className="border-r-0 hidden md:flex" {...props}>
+      <SidebarHeader className="border-b border-border/40 pb-4 pt-6">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -140,7 +140,7 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="px-2 py-4">
         <NavMain items={data.navMain} />
         {isAdminView ? (
           <NavMain items={data.adminNav} />
@@ -152,7 +152,7 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
           />
         )}
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="border-t border-border/40 pt-4 pb-6">
         <NavUser />
       </SidebarFooter>
     </Sidebar>

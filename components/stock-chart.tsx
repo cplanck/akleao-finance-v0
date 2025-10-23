@@ -352,7 +352,7 @@ export default function StockChart({
                 const dotIndex = (data?.length || 0) - 1;
                 if (timeRange === "LIVE" && props.index === dotIndex && dotIndex >= 0) {
                   return (
-                    <>
+                    <g>
                       {/* Ping animation ring - only when refreshing, rendered behind */}
                       {isRefreshing && (
                         <circle
@@ -387,10 +387,10 @@ export default function StockChart({
                           pointerEvents: 'none',
                         }}
                       />
-                    </>
+                    </g>
                   );
                 }
-                return null;
+                return <g />;
               }}
               activeDot={{
                 r: 6,
