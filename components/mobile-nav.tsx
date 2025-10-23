@@ -59,7 +59,7 @@ export function MobileNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
-      <div className="px-4 pb-4 pointer-events-none">
+      <div className="px-3 pb-2 pointer-events-none">
         <div className={cn(
           "pointer-events-auto rounded-2xl border border-border/40 bg-background/50 backdrop-blur-xl supports-[backdrop-filter]:bg-background/40 shadow-lg transition-all duration-300",
           isScrolled ? "scale-95" : "scale-100"
@@ -77,8 +77,8 @@ export function MobileNav() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex flex-col items-center justify-center rounded-xl transition-all duration-200 min-w-[4rem]",
-                    isScrolled ? "gap-0 px-3 py-2" : "gap-1 px-3 py-2",
+                    "flex flex-col items-center justify-center rounded-xl transition-all duration-200 min-w-[4rem] h-full",
+                    isScrolled ? "gap-0 px-3" : "gap-1 px-3",
                     isActive
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground"
