@@ -7,9 +7,11 @@ import {
   SparklesIcon,
   SearchIcon,
   LineChartIcon,
-  DatabaseIcon
+  UserIcon
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useSession } from "@/lib/auth-client"
+import Image from "next/image"
 
 const navItems = [
   {
@@ -28,14 +30,16 @@ const navItems = [
     icon: LineChartIcon,
   },
   {
-    title: "Admin",
-    href: "/admin",
-    icon: DatabaseIcon,
+    title: "You",
+    href: "/settings",
+    icon: UserIcon,
+    isProfile: true,
   },
 ]
 
 export function MobileNav() {
   const pathname = usePathname()
+  const { data: session } = useSession()
   const [isScrolled, setIsScrolled] = useState(false)
   const [lastScrollY, setLastScrollY] = useState(0)
 
@@ -77,8 +81,8 @@ export function MobileNav() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex flex-col items-center justify-center rounded-xl transition-all duration-200 min-w-[4rem] h-full",
-                    isScrolled ? "gap-0 px-3" : "gap-1 px-3",
+                    "flex flex-col items-center justify-center rounded-xl transition-all duration-200 min-w-[4rem] flex-shrink-0",
+                    isScrolled ? "gap-0 px-3 py-2.5" : "gap-1 px-3 py-3",
                     isActive
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground"
@@ -88,12 +92,27 @@ export function MobileNav() {
                     "relative flex items-center justify-center transition-all duration-200",
                     isActive && "scale-110"
                   )}>
-                    <Icon className={cn(
-                      "transition-all duration-200",
-                      isScrolled ? "h-4 w-4" : "h-5 w-5",
-                      isActive && "fill-primary/10"
-                    )} />
-                    {isActive && (
+                    {item.isProfile && session?.user?.image ? (
+                      <div className={cn(
+                        "relative rounded-full overflow-hidden transition-all duration-200 border-2",
+                        isScrolled ? "h-4 w-4" : "h-5 w-5",
+                        isActive ? "border-primary" : "border-transparent"
+                      )}>
+                        <Image
+                          src={session.user.image}
+                          alt={session.user.name || "User"}
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <Icon className={cn(
+                        "transition-all duration-200",
+                        isScrolled ? "h-4 w-4" : "h-5 w-5",
+                        isActive && "fill-primary/10"
+                      )} />
+                    )}
+                    {isActive && !item.isProfile && (
                       <div className="absolute inset-0 bg-primary/10 rounded-full blur-md -z-10" />
                     )}
                   </div>

@@ -12,6 +12,7 @@ import {
   SparklesIcon,
   SearchIcon,
   LineChartIcon,
+  SettingsIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { usePathname } from "next/navigation"
@@ -50,9 +51,9 @@ const data = {
       icon: LineChartIcon,
     },
     {
-      title: "Admin",
-      url: "/admin",
-      icon: DatabaseIcon,
+      title: "Settings",
+      url: "/settings",
+      icon: SettingsIcon,
     },
   ],
   adminNav: [
@@ -100,8 +101,9 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
   const [mounted, setMounted] = React.useState(false)
   const { pinnedStocks } = usePinnedStocks()
 
-  // Check if we're in admin view
+  // Check if we're in admin or settings view
   const isAdminView = pathname?.startsWith('/admin')
+  const isSettingsView = pathname?.startsWith('/settings')
 
   // Ensure component is mounted before accessing theme
   React.useEffect(() => {
@@ -142,7 +144,7 @@ export function AppSidebar({ selectedStock, onSelectStock, ...props }: AppSideba
       </SidebarHeader>
       <SidebarContent className="px-2 py-4">
         <NavMain items={data.navMain} />
-        {isAdminView ? (
+        {(isAdminView || isSettingsView) ? (
           <NavMain items={data.adminNav} />
         ) : (
           <NavPinnedStocks
