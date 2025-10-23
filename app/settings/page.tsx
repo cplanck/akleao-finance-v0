@@ -7,8 +7,8 @@ import { SiteHeader } from "@/components/site-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useSession, signOut } from "@/lib/auth-client";
-import { DatabaseIcon, LogOutIcon } from "lucide-react";
+import { useSession, signOut, signIn } from "@/lib/auth-client";
+import { DatabaseIcon, LogOutIcon, LogInIcon } from "lucide-react";
 import Link from "next/link";
 
 // For now, hardcode admin user emails - this should come from a database in production
@@ -20,6 +20,13 @@ export default function SettingsPage() {
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleSignIn = async () => {
+    await signIn.social({
+      provider: "google",
+      callbackURL: "/settings",
+    });
   };
 
   return (
@@ -70,8 +77,12 @@ export default function SettingsPage() {
                     </div>
                   </>
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p>Not signed in</p>
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground mb-4">Not signed in</p>
+                    <Button onClick={handleSignIn}>
+                      <LogInIcon className="mr-2 h-4 w-4" />
+                      Sign In with Google
+                    </Button>
                   </div>
                 )}
               </CardContent>

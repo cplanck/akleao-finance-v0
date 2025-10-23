@@ -68,10 +68,7 @@ export function MobileNav() {
           "pointer-events-auto rounded-2xl border border-border/40 bg-background/50 backdrop-blur-xl supports-[backdrop-filter]:bg-background/40 shadow-lg transition-all duration-300",
           isScrolled ? "scale-95" : "scale-100"
         )}>
-          <div className={cn(
-            "flex items-center justify-around px-2 transition-all duration-300",
-            isScrolled ? "h-14" : "h-16"
-          )}>
+          <div className="flex items-center justify-around px-2">
             {navItems.map((item) => {
               const Icon = item.icon
               const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href))
@@ -81,8 +78,8 @@ export function MobileNav() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex flex-col items-center justify-center rounded-xl transition-all duration-200 min-w-[4rem] flex-shrink-0",
-                    isScrolled ? "gap-0 px-3 py-2.5" : "gap-1 px-3 py-3",
+                    "flex flex-col items-center justify-center rounded-xl transition-all duration-300 min-w-[4rem] flex-shrink-0",
+                    isScrolled ? "gap-0 px-3 h-14" : "gap-1 px-3 h-16",
                     isActive
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground"
