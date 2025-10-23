@@ -58,8 +58,8 @@ export function MobileNav() {
   }, [lastScrollY])
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden pointer-events-none">
-      <div className="px-4 pb-4">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
+      <div className="px-4 pb-4 pointer-events-none">
         <div className={cn(
           "pointer-events-auto rounded-2xl border border-border/40 bg-background/50 backdrop-blur-xl supports-[backdrop-filter]:bg-background/40 shadow-lg transition-all duration-300",
           isScrolled ? "scale-95" : "scale-100"
