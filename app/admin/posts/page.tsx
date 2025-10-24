@@ -83,6 +83,7 @@ async function fetchPosts(
   if (trackedOnly) params.append("tracked_only", "true");
   params.append("offset", offset.toString());
   params.append("limit", limit.toString());
+  params.append("sort_by", "posted_at"); // Use chronological sort to get all posts
 
   const res = await fetch(`${API_URL}/api/admin/reddit-posts?${params}`);
   if (!res.ok) throw new Error("Failed to fetch posts");
@@ -97,6 +98,7 @@ function PostsPageContent() {
   const [subredditFilter, setSubredditFilter] = useState(initialSubreddit);
   const [stockFilter, setStockFilter] = useState(initialStock);
   const [showTrackedOnly, setShowTrackedOnly] = useState(false);
+  const [showWithTickersOnly, setShowWithTickersOnly] = useState(false);
   const [subredditOpen, setSubredditOpen] = useState(false);
 
   const { data: subredditsData } = useQuery({
@@ -111,8 +113,13 @@ function PostsPageContent() {
 
   const activeSubreddits = subredditsData?.filter(sub => sub.is_active) || [];
 
-  // Server-side filtering is now handling tracked posts
-  const filteredPosts = data?.posts || [];
+  // Apply client-side filtering for "with tickers only"
+  const filteredPosts = (data?.posts || []).filter(post => {
+    if (showWithTickersOnly && !post.primary_stock) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -204,8 +211,21 @@ function PostsPageContent() {
                 Tracked only
               </Label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="with-tickers-only"
+                checked={showWithTickersOnly}
+                onCheckedChange={(checked) => setShowWithTickersOnly(checked as boolean)}
+              />
+              <Label
+                htmlFor="with-tickers-only"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+              >
+                With tickers only
+              </Label>
+            </div>
           </div>
-          {(subredditFilter || stockFilter || showTrackedOnly) && (
+          {(subredditFilter || stockFilter || showTrackedOnly || showWithTickersOnly) && (
             <Button
               variant="outline"
               size="sm"
@@ -214,6 +234,7 @@ function PostsPageContent() {
                 setSubredditFilter("");
                 setStockFilter("");
                 setShowTrackedOnly(false);
+                setShowWithTickersOnly(false);
               }}
             >
               Clear Filters
@@ -249,23 +270,29 @@ function PostsPageContent() {
 export default function PostsPage() {
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar variant="inset" />
       <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-          <Suspense
-            fallback={
-              <div className="space-y-6">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-64 w-full" />
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col gap-2 pb-20 md:pb-0">
+            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+              <div className="px-3 sm:px-4 lg:px-6 space-y-4 sm:space-y-6">
+                <Suspense
+                  fallback={
+                    <div className="space-y-6">
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-64 w-full" />
+                    </div>
+                  }
+                >
+                  <PostsPageContent />
+                </Suspense>
               </div>
-            }
-          >
-            <PostsPageContent />
-          </Suspense>
+            </div>
+          </div>
         </div>
       </SidebarInset>
-          <MobileNav />
+      <MobileNav />
     </SidebarProvider>
   );
 }

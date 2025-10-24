@@ -9,7 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Database, TrendingUp, FileText, Activity, Clock, CheckCircle2, XCircle, Loader2, MessageSquare, Eye, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { OpenAISettingsCard } from "@/components/openai-settings-card";
-import { TrackedSubredditsTable } from "@/components/tracked-subreddits-table";
 import { PostsScraperStatus } from "@/components/posts-scraper-status";
 import { CommentScraperStatus } from "@/components/comment-scraper-status";
 import { toast } from "sonner";
@@ -431,9 +430,6 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Tracked Subreddits Table */}
-      <TrackedSubredditsTable />
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">

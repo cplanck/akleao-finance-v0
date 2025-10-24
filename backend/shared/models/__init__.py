@@ -4,6 +4,9 @@ from .user import User
 from .stock import Stock
 from .reddit_post import RedditPost, RedditComment
 from .post_analysis import PostAnalysis
+from .post_analysis_snapshot import PostAnalysisSnapshot
+from .post_tracking_config import PostTrackingConfig
+from .ai_prompt import AIPrompt
 from .news_article import NewsArticle
 from .sentiment import SentimentAnalysis
 from .research import ResearchReport
@@ -28,6 +31,9 @@ __all__ = [
     "RedditPost",
     "RedditComment",
     "PostAnalysis",
+    "PostAnalysisSnapshot",
+    "PostTrackingConfig",
+    "AIPrompt",
     "NewsArticle",
     "SentimentAnalysis",
     "ResearchReport",

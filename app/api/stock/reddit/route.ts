@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
     // Fetch Reddit posts for this stock from the backend
     const response = await fetch(
-      `${API_URL}/api/admin/reddit-posts?stock=${symbol}&limit=${limit}`
+      `${API_URL}/api/admin/reddit-posts?stock=${symbol}&limit=${limit}&sort_by=posted_at`
     );
 
     if (!response.ok) {

@@ -409,6 +409,8 @@ async def get_all_tracked_subreddits(
 class SubredditSearchResult(BaseModel):
     name: str
     subscribers: Optional[int] = None
+    description: Optional[str] = None
+    public_description: Optional[str] = None
 
 
 @router.get("/search-subreddits", response_model=List[SubredditSearchResult])
@@ -444,13 +446,25 @@ async def search_subreddits(
             exact=False  # Allow partial matches
         )
 
-        # Extract name and subscriber count from results
+        # Extract name, subscriber count, and description from results
         results = []
         for subreddit in subreddits[:10]:  # Limit to 10 results for autocomplete
             try:
+                # Get public_description (short tagline) and description (long description)
+                public_desc = getattr(subreddit, 'public_description', None)
+                desc = getattr(subreddit, 'description', None)
+
+                # Clean up descriptions (remove excessive whitespace)
+                if public_desc:
+                    public_desc = ' '.join(public_desc.split())[:200]  # Limit to 200 chars
+                if desc:
+                    desc = ' '.join(desc.split())[:500]  # Limit to 500 chars
+
                 results.append(SubredditSearchResult(
                     name=subreddit.display_name,
-                    subscribers=subreddit.subscribers
+                    subscribers=subreddit.subscribers,
+                    public_description=public_desc,
+                    description=desc
                 ))
             except Exception:
                 # Skip subreddits that error out

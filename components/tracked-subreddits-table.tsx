@@ -79,6 +79,8 @@ interface ScraperJob {
 interface SubredditSearchResult {
   name: string;
   subscribers: number | null;
+  description?: string | null;
+  public_description?: string | null;
 }
 
 async function fetchTrackedSubreddits(): Promise<TrackedSubreddit[]> {
@@ -371,27 +373,29 @@ export function TrackedSubredditsTable() {
                     Search for a subreddit by name or enter it manually. Start typing to see suggestions.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="py-4 space-y-4">
+                <div className="py-4">
                   <Popover open={open} onOpenChange={setOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         role="combobox"
                         aria-expanded={open}
-                        className="w-full justify-between"
+                        className="w-full justify-between font-normal"
                       >
-                        {newSubredditName
-                          ? `r/${newSubredditName}`
-                          : "Search or select subreddit..."}
+                        {newSubredditName ? (
+                          <span className="font-mono">r/{newSubredditName}</span>
+                        ) : (
+                          <span className="text-muted-foreground">Search for a subreddit...</span>
+                        )}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0">
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                       <Command shouldFilter={false}>
                         <CommandInput
-                          placeholder="Search subreddits..."
+                          placeholder="Type to search..."
                           value={searchQuery}
-                          onValueChange={setSearchQuery}
+                          onValueChange={(value) => setSearchQuery(value.toLowerCase())}
                         />
                         <CommandList>
                           {isSearching ? (
@@ -399,32 +403,52 @@ export function TrackedSubredditsTable() {
                               <Loader2 className="h-4 w-4 animate-spin mx-auto" />
                             </div>
                           ) : searchResults.length > 0 ? (
-                            <CommandGroup heading="Matching Subreddits">
-                              {searchResults.map((result) => (
-                                <CommandItem
-                                  key={result.name}
-                                  value={result.name}
-                                  onSelect={() => handleSelectSubreddit(result.name)}
-                                >
-                                  <Check
+                            <CommandGroup>
+                              {searchResults.map((result) => {
+                                const isSelected = newSubredditName === result.name;
+                                return (
+                                  <CommandItem
+                                    key={result.name}
+                                    value={result.name}
+                                    onSelect={() => handleSelectSubreddit(result.name)}
                                     className={cn(
-                                      "mr-2 h-4 w-4",
-                                      newSubredditName === result.name
-                                        ? "opacity-100"
-                                        : "opacity-0"
+                                      "group flex flex-col items-start py-3 aria-selected:bg-primary aria-selected:text-black",
+                                      isSelected && "bg-primary text-black aria-selected:bg-primary/90 aria-selected:text-black"
                                     )}
-                                  />
-                                  <div className="flex items-center justify-between w-full">
-                                    <span className="font-mono">r/{result.name}</span>
-                                    {result.subscribers && (
-                                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <Users className="h-3 w-3" />
-                                        {result.subscribers.toLocaleString()}
-                                      </span>
-                                    )}
-                                  </div>
-                                </CommandItem>
-                              ))}
+                                  >
+                                    <div className="flex items-start w-full gap-2">
+                                      <Check
+                                        className={cn(
+                                          "h-4 w-4 mt-0.5 flex-shrink-0 group-aria-selected:text-black",
+                                          isSelected ? "opacity-100 text-black" : "opacity-0"
+                                        )}
+                                      />
+                                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-mono font-medium group-aria-selected:text-black">r/{result.name}</span>
+                                          {result.subscribers && (
+                                            <span className={cn(
+                                              "text-xs flex items-center gap-1 group-aria-selected:text-black",
+                                              isSelected ? "text-black/90" : "text-muted-foreground"
+                                            )}>
+                                              <Users className="h-3 w-3" />
+                                              {result.subscribers.toLocaleString()}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {(result.public_description || result.description) && (
+                                          <p className={cn(
+                                            "text-xs line-clamp-2 group-aria-selected:text-black",
+                                            isSelected ? "text-black/90" : "text-muted-foreground"
+                                          )}>
+                                            {result.public_description || result.description}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </CommandItem>
+                                );
+                              })}
                             </CommandGroup>
                           ) : searchQuery.length >= 2 ? (
                             <CommandEmpty>No subreddits found.</CommandEmpty>
@@ -437,19 +461,6 @@ export function TrackedSubredditsTable() {
                       </Command>
                     </PopoverContent>
                   </Popover>
-                  <div className="text-xs text-muted-foreground">
-                    Or enter manually:
-                  </div>
-                  <Input
-                    placeholder="e.g., wallstreetbets"
-                    value={newSubredditName}
-                    onChange={(e) => setNewSubredditName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleAddSubreddit();
-                      }
-                    }}
-                  />
                 </div>
                 <DialogFooter>
                   <Button

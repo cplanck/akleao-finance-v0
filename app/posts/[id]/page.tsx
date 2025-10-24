@@ -10,7 +10,7 @@ import { SiteHeader } from "@/components/site-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, ArrowUp, ExternalLink, TrendingUp, TrendingDown, Minus, Eye, Clock, Sparkles, Loader2, ArrowLeft, Brain } from "lucide-react";
+import { MessageSquare, ArrowUp, ArrowDown, ExternalLink, TrendingUp, TrendingDown, Minus, Eye, Clock, Sparkles, Loader2, ArrowLeft, Brain, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -105,64 +105,109 @@ async function fetchAnalyses(postId: string): Promise<{ analyses: PostAnalysis[]
 }
 
 function CommentTree({ comments, depth = 0 }: { comments: RedditComment[]; depth?: number }) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
   if (!comments || comments.length === 0) return null;
 
+  const toggleCollapse = (commentId: string) => {
+    setCollapsed(prev => ({ ...prev, [commentId]: !prev[commentId] }));
+  };
+
   return (
-    <div className={depth > 0 ? "ml-6 border-l-2 border-primary/20 pl-4 mt-3" : "space-y-3"}>
+    <div className={depth > 0 ? "ml-3 border-l-2 border-primary/20 pl-3 mt-3" : "space-y-3"}>
       {comments.map((comment) => {
         // High quality comment if score >= 10
         const isHighQuality = comment.score >= 10;
+        // Downvoted comment if score < 0
+        const isDownvoted = comment.score < 0;
+        const isCollapsed = collapsed[comment.id];
+        const hasReplies = comment.replies && comment.replies.length > 0;
 
         return (
           <div key={comment.id} className="space-y-2">
-            <div
-              className={`rounded-lg p-4 transition-all duration-300 ${
+            <button
+              onClick={() => toggleCollapse(comment.id)}
+              className={`w-full rounded-lg transition-all duration-300 cursor-pointer text-left group ${
                 isHighQuality
                   ? "border-2 border-green-500/30 bg-gradient-to-br from-green-500/10 to-green-500/5 shadow-lg hover:shadow-green-500/10 hover:border-green-500/40"
+                  : isDownvoted
+                  ? "border-2 border-red-500/30 bg-gradient-to-br from-red-500/10 to-red-500/5 hover:border-red-500/40"
                   : "border border-primary/10 bg-gradient-to-br from-card/50 to-card/30 hover:border-primary/20 hover:bg-card/60"
               }`}
+              aria-label={isCollapsed ? "Expand comment" : "Collapse comment"}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 p-4">
                 <div className="flex-1 space-y-3">
-                <div className="flex items-center gap-2 text-xs flex-wrap">
-                  <span className="font-semibold text-foreground">u/{comment.author}</span>
-                  <span className="text-muted-foreground opacity-50">•</span>
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatTimeAgo(comment.created_at)}
-                  </span>
-                  {comment.sentiment_label && (
+                  <div className="flex items-center gap-2 text-xs flex-wrap">
+                    {hasReplies && (
+                      <span className="flex-shrink-0">
+                        {isCollapsed ? (
+                          <ChevronRight className="h-3 w-3" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3" />
+                        )}
+                      </span>
+                    )}
+                    <span className="font-semibold text-foreground">u/{comment.author}</span>
+                    <span className="text-muted-foreground opacity-50">•</span>
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {formatTimeAgo(comment.created_at)}
+                    </span>
+                    {comment.sentiment_label && (
+                      <>
+                        <span className="text-muted-foreground opacity-50">•</span>
+                        <Badge
+                          className={`text-xs px-2 py-0.5 ${
+                            comment.sentiment_label === "bullish"
+                              ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"
+                              : comment.sentiment_label === "bearish"
+                              ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                              : "bg-muted"
+                          }`}
+                        >
+                          {comment.sentiment_label}
+                        </Badge>
+                      </>
+                    )}
+                    {isCollapsed && (
+                      <span className="text-muted-foreground italic ml-1">
+                        (collapsed)
+                      </span>
+                    )}
+                  </div>
+                  {!isCollapsed && (
                     <>
-                      <span className="text-muted-foreground opacity-50">•</span>
-                      <Badge
-                        className={`text-xs px-2 py-0.5 ${
-                          comment.sentiment_label === "bullish"
-                            ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"
-                            : comment.sentiment_label === "bearish"
-                            ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
-                            : "bg-muted"
-                        }`}
-                      >
-                        {comment.sentiment_label}
-                      </Badge>
+                      <div className="text-sm leading-relaxed break-words overflow-hidden prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {comment.content}
+                        </ReactMarkdown>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full transition-colors ${
+                          isDownvoted
+                            ? "bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/15"
+                            : "bg-primary/10 text-primary hover:bg-primary/15"
+                        }`}>
+                          {isDownvoted ? (
+                            <ArrowDown className="h-3 w-3" />
+                          ) : (
+                            <ArrowUp className="h-3 w-3" />
+                          )}
+                          <span className="font-mono font-semibold">{comment.score}</span>
+                        </div>
+                        {isDownvoted && (
+                          <Badge variant="destructive" className="text-xs px-2 py-0.5">
+                            Downvoted
+                          </Badge>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
-                <div className="text-sm leading-relaxed break-words overflow-hidden prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {comment.content}
-                  </ReactMarkdown>
-                </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/15 transition-colors">
-                    <ArrowUp className="h-3 w-3" />
-                    <span className="font-mono font-semibold">{comment.score}</span>
-                  </div>
-                </div>
-                </div>
               </div>
-            </div>
-            {comment.replies && comment.replies.length > 0 && (
+            </button>
+            {!isCollapsed && hasReplies && (
               <CommentTree comments={comment.replies} depth={depth + 1} />
             )}
           </div>
@@ -318,18 +363,6 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
                 )}
               </div>
 
-              {/* Stats */}
-              <div className="flex items-center gap-6 text-sm">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/15 transition-colors">
-                  <ArrowUp className="h-4 w-4 text-primary" />
-                  <span className="font-mono font-semibold">{post.score.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 hover:bg-accent/15 transition-colors">
-                  <MessageSquare className="h-4 w-4 text-accent-foreground" />
-                  <span className="font-mono font-semibold">{post.num_comments.toLocaleString()}</span>
-                </div>
-              </div>
-
               {/* Content */}
               {post.content && (
                 <div className="rounded-lg p-4 bg-gradient-to-br from-muted/40 to-muted/20 border border-primary/5">
@@ -340,6 +373,18 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
                   </div>
                 </div>
               )}
+
+              {/* Stats */}
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <ArrowUp className="h-3.5 w-3.5" />
+                  <span className="font-mono">{post.score.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span className="font-mono">{post.num_comments.toLocaleString()}</span>
+                </div>
+              </div>
 
               {/* Tabs and action button */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-2 border-t border-primary/10">
@@ -495,7 +540,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
                       <Button
                         onClick={() => analyzeMutation.mutate("direct")}
                         disabled={analyzeMutation.isPending}
-                        className="gap-2 min-w-[180px]"
+                        className="gap-2 min-w-[180px] bg-primary hover:bg-primary/90 text-primary-foreground"
                         variant="default"
                       >
                         {analyzeMutation.isPending ? (
@@ -513,7 +558,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
                       <Button
                         onClick={() => analyzeMutation.mutate("preprocessed")}
                         disabled={analyzeMutation.isPending}
-                        className="gap-2 min-w-[180px]"
+                        className="gap-2 min-w-[180px] border-primary/30 hover:bg-primary/10 hover:border-primary/50 hover:text-foreground"
                         variant="outline"
                       >
                         {analyzeMutation.isPending ? (

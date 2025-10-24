@@ -71,8 +71,8 @@ export default function StocksPage() {
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2 pb-20 md:pb-0">
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <div className="px-4 lg:px-6 space-y-6">
-      {/* Header */}
+              <div className="px-3 sm:px-4 lg:px-6 space-y-4 sm:space-y-6">
+            {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Tracked Stocks</h1>
         <div className="text-sm text-muted-foreground">
@@ -229,7 +229,7 @@ export default function StocksPage() {
           </div>
         </div>
       </SidebarInset>
-          <MobileNav />
+      <MobileNav />
     </SidebarProvider>
   );
 }

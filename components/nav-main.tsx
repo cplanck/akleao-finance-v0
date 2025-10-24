@@ -29,7 +29,8 @@ export function NavMain({
       <SidebarGroupContent>
         <SidebarMenu className="space-y-1">
           {items.map((item) => {
-            const isActive = pathname === item.url || (item.url !== "/" && pathname?.startsWith(item.url))
+            // Exact match for /admin to prevent Overview from being highlighted on all admin pages
+            const isActive = pathname === item.url || (item.url !== "/" && item.url !== "/admin" && pathname?.startsWith(item.url))
 
             return (
               <SidebarMenuItem key={item.title}>

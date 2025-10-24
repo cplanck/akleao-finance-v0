@@ -133,8 +133,15 @@ export default function CommentsPage() {
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2 pb-20 md:pb-0">
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <div className="px-4 lg:px-6">
-                <Suspense fallback={<div>Loading...</div>}>
+              <div className="px-3 sm:px-4 lg:px-6 space-y-4 sm:space-y-6">
+                <Suspense
+                  fallback={
+                    <div className="space-y-6">
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-64 w-full" />
+                    </div>
+                  }
+                >
                   <CommentsPageContent />
                 </Suspense>
               </div>
@@ -142,7 +149,7 @@ export default function CommentsPage() {
           </div>
         </div>
       </SidebarInset>
-          <MobileNav />
+      <MobileNav />
     </SidebarProvider>
   );
 }

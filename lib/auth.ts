@@ -10,6 +10,16 @@ export const auth = betterAuth({
   }),
   // JWT Configuration - use same secret as FastAPI
   secret: process.env.BETTER_AUTH_SECRET || process.env.JWT_SECRET_KEY!,
+  // Include custom user fields in session
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        required: false,
+        defaultValue: "user",
+      }
+    }
+  },
   session: {
     // Use JWT instead of session tokens
     jwt: {

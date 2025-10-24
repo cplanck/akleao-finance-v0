@@ -6,10 +6,12 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 from openai import OpenAI
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, select
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
+from jinja2 import Template
 from .models.reddit_post import RedditPost, RedditComment
+from .models.ai_prompt import AIPrompt
 
 # Encryption configuration
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
@@ -79,6 +81,40 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     input_cost = (input_tokens / 1_000_000) * COSTS[model]["input"]
     output_cost = (output_tokens / 1_000_000) * COSTS[model]["output"]
     return input_cost + output_cost
+
+
+def get_active_prompt(db: Session, prompt_type: str) -> Optional[AIPrompt]:
+    """Fetch the active prompt for a given type from the database.
+
+    Args:
+        db: Database session
+        prompt_type: Type of prompt ("comment_scoring", "post_analysis", "cross_post_synthesis")
+
+    Returns:
+        AIPrompt instance or None if no active prompt found
+    """
+    result = db.execute(
+        select(AIPrompt)
+        .where(AIPrompt.prompt_type == prompt_type)
+        .where(AIPrompt.is_active == True)
+        .order_by(AIPrompt.version.desc())
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+def render_prompt_template(template_string: str, context: Dict[str, Any]) -> str:
+    """Render a Jinja2 template with the given context.
+
+    Args:
+        template_string: Jinja2 template string
+        context: Dictionary of variables to pass to the template
+
+    Returns:
+        Rendered string
+    """
+    template = Template(template_string)
+    return template.render(**context)
 
 
 def score_comment_quality(

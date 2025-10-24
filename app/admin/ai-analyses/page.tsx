@@ -100,21 +100,29 @@ export default function AIAnalysesPage() {
 
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar variant="inset" />
       <SidebarInset>
         <SiteHeader />
-        <main className="flex-1 p-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="h-5 w-5" />
-                AI Analyses
-              </CardTitle>
-              <CardDescription>
-                View all AI-generated post analyses
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col gap-2 pb-20 md:pb-0">
+            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+              <div className="px-3 sm:px-4 lg:px-6 space-y-4 sm:space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <h1 className="text-3xl font-bold flex items-center gap-2">
+                    <Brain className="h-8 w-8" />
+                    AI Analyses
+                  </h1>
+                  {data && (
+                    <div className="text-sm text-muted-foreground">
+                      {data.total.toLocaleString()} total analyses
+                    </div>
+                  )}
+                </div>
+
+                {/* Content Card */}
+                <Card>
+                  <CardContent className="pt-6">
               {isLoading ? (
                 <div className="space-y-3">
                   {[...Array(5)].map((_, i) => (
@@ -212,11 +220,14 @@ export default function AIAnalysesPage() {
                   <p className="text-sm mt-1">Generate your first analysis from the Posts page</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </main>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </div>
       </SidebarInset>
-          <MobileNav />
+      <MobileNav />
     </SidebarProvider>
   );
 }

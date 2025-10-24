@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Pin, TrendingUp, TrendingDown } from "lucide-react"
 import {
   SidebarGroup,
@@ -49,7 +50,7 @@ export function NavPinnedStocks({
                 <SidebarMenuItem key={item.symbol}>
                   <SidebarMenuButton
                     tooltip={item.symbol}
-                    onClick={() => onSelectStock?.(item.symbol)}
+                    asChild
                     isActive={isSelected}
                     className={cn(
                       "cursor-pointer group transition-all duration-300 relative overflow-hidden",
@@ -57,30 +58,32 @@ export function NavPinnedStocks({
                       !isSelected && "hover:bg-muted/50"
                     )}
                   >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className={cn(
-                        "font-semibold text-sm transition-all duration-300",
-                        isSelected && "text-primary",
-                        !isSelected && "group-hover:translate-x-0.5"
-                      )}>
-                        {item.symbol}
-                      </span>
-                      {item.change !== undefined && (
-                        <span
-                          className={cn(
-                            "ml-auto text-[11px] font-bold flex items-center gap-1 px-2 py-0.5 rounded-full",
-                            isPositive ? "text-green-500 bg-green-500/10" : "text-red-500 bg-red-500/10"
-                          )}
-                        >
-                          {isPositive ? (
-                            <TrendingUp className="h-2.5 w-2.5" />
-                          ) : (
-                            <TrendingDown className="h-2.5 w-2.5" />
-                          )}
-                          {Math.abs(item.change).toFixed(2)}%
+                    <Link href={`/research?symbol=${item.symbol}`}>
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className={cn(
+                          "font-semibold text-sm transition-all duration-300",
+                          isSelected && "text-primary",
+                          !isSelected && "group-hover:translate-x-0.5"
+                        )}>
+                          {item.symbol}
                         </span>
-                      )}
-                    </div>
+                        {item.change !== undefined && (
+                          <span
+                            className={cn(
+                              "ml-auto text-[11px] font-bold flex items-center gap-1 px-2 py-0.5 rounded-full",
+                              isPositive ? "text-green-500 bg-green-500/10" : "text-red-500 bg-red-500/10"
+                            )}
+                          >
+                            {isPositive ? (
+                              <TrendingUp className="h-2.5 w-2.5" />
+                            ) : (
+                              <TrendingDown className="h-2.5 w-2.5" />
+                            )}
+                            {Math.abs(item.change).toFixed(2)}%
+                          </span>
+                        )}
+                      </div>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )
