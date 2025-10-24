@@ -44,8 +44,9 @@ function ResearchContent() {
   const searchParams = useSearchParams();
   const { pinnedStocks, unpin } = usePinnedStocks();
 
-  // Get stock from URL, default to AAPL
-  const stockFromUrl = searchParams.get("symbol") || "AAPL";
+  // Get stock from URL, default to first pinned stock or AAPL
+  const defaultStock = pinnedStocks.length > 0 ? pinnedStocks[0].symbol : "AAPL";
+  const stockFromUrl = searchParams.get("symbol") || defaultStock;
   const [selectedStock, setSelectedStock] = useState(stockFromUrl);
   const [dataFetchedAt, setDataFetchedAt] = useState<Date>(new Date());
   const [timeAgo, setTimeAgo] = useState<string>("just now");
