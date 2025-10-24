@@ -19,8 +19,6 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { PositionPerformanceChart } from "@/components/position-performance-chart";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-
 interface Position {
   id: number;
   stock_symbol: string;
@@ -45,19 +43,19 @@ interface PerformanceData {
 
 async function fetchPositions(activeOnly: boolean = false): Promise<Position[]> {
   const params = activeOnly ? "?active_only=true" : "";
-  const res = await fetch(`${API_URL}/api/positions${params}`);
+  const res = await fetch(`/api/positions${params}`);
   if (!res.ok) throw new Error("Failed to fetch positions");
   return res.json();
 }
 
 async function fetchPerformance(positionId: number): Promise<PerformanceData[]> {
-  const res = await fetch(`${API_URL}/api/positions/${positionId}/performance`);
+  const res = await fetch(`/api/positions/${positionId}/performance`);
   if (!res.ok) throw new Error("Failed to fetch performance");
   return res.json();
 }
 
 async function createPosition(data: any): Promise<Position> {
-  const res = await fetch(`${API_URL}/api/positions/`, {
+  const res = await fetch(`/api/positions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -67,7 +65,7 @@ async function createPosition(data: any): Promise<Position> {
 }
 
 async function closePosition(positionId: number, exitPrice: number, exitDate: string): Promise<Position> {
-  const res = await fetch(`${API_URL}/api/positions/${positionId}`, {
+  const res = await fetch(`/api/positions/${positionId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -81,7 +79,7 @@ async function closePosition(positionId: number, exitPrice: number, exitDate: st
 }
 
 async function deletePosition(positionId: number): Promise<void> {
-  const res = await fetch(`${API_URL}/api/positions/${positionId}`, {
+  const res = await fetch(`/api/positions/${positionId}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete position");

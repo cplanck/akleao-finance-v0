@@ -395,8 +395,7 @@ function SimulatePositionDialog({
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-      const res = await fetch(`${API_URL}/api/positions/`, {
+      const res = await fetch(`/api/positions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
