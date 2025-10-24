@@ -81,15 +81,15 @@ export function NavUser() {
     return name.substring(0, 2).toUpperCase();
   };
 
-  // Generate Gravatar URL from email as fallback since Better Auth isn't providing the Google avatar
-  const getGravatarUrl = (email: string) => {
-    // Simple hash function for email (in production, use proper MD5)
-    const hash = email.toLowerCase().trim();
-    return `https://www.gravatar.com/avatar/${hash}?d=identicon&s=200`;
+  // Use Vercel avatar service as fallback if no image is provided
+  const getVercelAvatarUrl = (identifier?: string) => {
+    if (!identifier) return undefined;
+    // Use the user's name or email as the identifier
+    return `https://avatar.vercel.sh/${encodeURIComponent(identifier)}`;
   };
 
-  // Use Gravatar as fallback if no image is provided
-  const avatarUrl = user.image || getGravatarUrl(user.email);
+  // Use Google image or fallback to Vercel avatar
+  const avatarUrl = user.image || getVercelAvatarUrl(user.name || user.email);
 
   return (
     <SidebarMenu>

@@ -52,7 +52,10 @@ export default function SettingsPage() {
                   <>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-16 w-16">
-                        <AvatarImage src={session.user.image || undefined} alt={session.user.name || "User"} />
+                        <AvatarImage
+                          src={session.user.image || `https://avatar.vercel.sh/${encodeURIComponent(session.user.name || session.user.email)}`}
+                          alt={session.user.name || "User"}
+                        />
                         <AvatarFallback>
                           {session.user.name
                             ? session.user.name.split(' ').map(n => n[0]).join('').toUpperCase()

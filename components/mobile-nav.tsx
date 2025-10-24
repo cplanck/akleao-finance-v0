@@ -89,14 +89,14 @@ export function MobileNav() {
                     "relative flex items-center justify-center transition-all duration-200",
                     isActive && "scale-110"
                   )}>
-                    {item.isProfile && session?.user?.image ? (
+                    {item.isProfile && session?.user ? (
                       <div className={cn(
                         "relative rounded-full overflow-hidden transition-all duration-200 border-2",
                         isScrolled ? "h-4 w-4" : "h-5 w-5",
                         isActive ? "border-primary" : "border-transparent"
                       )}>
                         <Image
-                          src={session.user.image}
+                          src={session.user.image || `https://avatar.vercel.sh/${encodeURIComponent(session.user.name || session.user.email)}`}
                           alt={session.user.name || "User"}
                           fill
                           className="object-cover"
